@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import utils
+from test.utils import random_string
 from unittest import TestCase
 from mock import Mock, MagicMock, patch
 
@@ -9,8 +9,8 @@ class BaseLimiterTest(TestCase):
     def setUp(self):
         self.limit = 10
         self.window = 100
-        self.table_name = utils.random_string()
-        self.resource_name = utils.random_string()
+        self.table_name = random_string()
+        self.resource_name = random_string()
 
 class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
     def setUp(self):
@@ -19,13 +19,10 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
         self.mock_manager.get_token = Mock()
 
     def test_call_account_id_pos(self):
-        arg_1 = utils.random_string()
-        arg_2 = utils.random_string()
-        account_id = utils.random_string()
+        arg_1 = random_string()
+        arg_2 = random_string()
+        account_id = random_string()
         account_id_pos = 2
-
-        expected_manager_args = [(self.resource_name, account_id)]
-        expected_limited_func_args = [(arg_1, arg_2, account_id)]
 
         func_to_limit = Mock()
         limiter = rate_limit(
@@ -43,13 +40,10 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
         func_to_limit.assert_called_with(arg_1, arg_2, account_id)
 
     def test_call_account_id_key(self):
-        arg_1 = utils.random_string()
-        arg_2 = utils.random_string()
-        account_id = utils.random_string()
+        arg_1 = random_string()
+        arg_2 = random_string()
+        account_id = random_string()
         account_id_key = 'account'
-
-        expected_manager_args = [(self.resource_name, account_id)]
-        expected_limited_func_args = [(arg_1, arg_2, {account_id_key: account_id})]
 
         func_to_limit = MagicMock()
         limiter = rate_limit(
@@ -95,9 +89,9 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_decoratored_account_id_pos(self, mock_manager_delegate):
-        arg_1 = utils.random_string()
-        arg_2 = utils.random_string()
-        account_id = utils.random_string()
+        arg_1 = random_string()
+        arg_2 = random_string()
+        account_id = random_string()
 
         mock_manager = Mock()
         mock_manager.return_value.get_token = Mock()
@@ -108,9 +102,9 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_decoratored_account_id_key(self, mock_manager_delegate):
-        arg_1 = utils.random_string()
-        arg_2 = utils.random_string()
-        account_id = utils.random_string()
+        arg_1 = random_string()
+        arg_2 = random_string()
+        account_id = random_string()
 
         mock_manager = Mock()
         mock_manager.return_value.get_token = Mock()
@@ -121,16 +115,22 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
 
     @rate_limit('my-resource', 'my-table', 10, 100, account_id_pos=3)
     def _limited_func_account_id_pos(self, arg_1, arg_2, account_id):
+        self.assertIsNotNone(arg_1)
+        self.assertIsNotNone(arg_2)
+        self.assertIsNotNone(account_id)
         return True
 
     @rate_limit('my-resource', 'my-table', 10, 100)
-    def _limited_func_account_id_key(self, arg_1, arg_2, account_id=None):
+    def _limited_func_account_id_key(self, arg_1, arg_2, account_id='my-account'):
+        self.assertIsNotNone(arg_1)
+        self.assertIsNotNone(arg_2)
+        self.assertIsNotNone(account_id)
         return True
 
 class FungibleTokenLimiterContextManagerTest(BaseLimiterTest):
     def setUp(self):
         super(FungibleTokenLimiterContextManagerTest, self).setUp()
-        self.account_id = utils.random_string()
+        self.account_id = random_string()
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_get_token_ctor_params(self, mock_manager_delegate):

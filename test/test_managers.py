@@ -1,19 +1,16 @@
 #!/usr/bin/env python
-import sys
 import time
-import utils
-
-from limiter import clients
+from unittest import TestCase
+from test.utils import random_string
+from mock import Mock, MagicMock
+from botocore.exceptions import ClientError
 from limiter.managers import FungibleTokenManager
 from limiter.exceptions import CapacityExhaustedException
-from botocore.exceptions import ClientError
-from unittest import TestCase
-from mock import Mock, MagicMock
 
 class FungibleTokenManagerTest(TestCase):
     def setUp(self):
-        self.table = utils.random_string()
-        self.resource_name = utils.random_string()
+        self.table = random_string()
+        self.resource_name = random_string()
         self.limit = 10
         self.window = 100
         self.manager = FungibleTokenManager(self.table, self.resource_name, self.limit, self.window)
@@ -46,7 +43,7 @@ class FungibleTokenManagerTest(TestCase):
         self.assertEquals(expected, actual)
 
     def test_get_bucket_token(self):
-        account_id = utils.random_string()
+        account_id = random_string()
         exec_time = int(time.time())
 
         expected = {'tokens': 5, 'last_refill': int(time.time())}
@@ -62,24 +59,26 @@ class FungibleTokenManagerTest(TestCase):
         self.assertEquals(1, len(actual_args))
 
         expected_args = [
-            ({'Key': {
-                'resourceName': self.resource_name,
-                'accountId': account_id
-            },
-            'UpdateExpression': 'add tokens :dec',
-            'ConditionExpression': 'tokens > :min OR lastRefill < :failsafe OR attribute_not_exists(tokens)',
-            'ExpressionAttributeValues': {
-                ':dec': -1,
-                ':min': 0,
-                ':failsafe': exec_time - self.manager.window
-            },
-            'ReturnValues': 'ALL_NEW'})
+            ({
+                'Key': {
+                    'resourceName': self.resource_name,
+                    'accountId': account_id
+                },
+                'UpdateExpression': 'add tokens :dec',
+                'ConditionExpression': 'tokens > :min OR lastRefill < :failsafe OR attribute_not_exists(tokens)',
+                'ExpressionAttributeValues': {
+                    ':dec': -1,
+                    ':min': 0,
+                    ':failsafe': exec_time - self.manager.window
+                },
+                'ReturnValues': 'ALL_NEW'
+            })
         ]
 
         self.assertEquals(expected_args, actual_args[0])
 
     def test_get_bucket_token_exhausted(self):
-        account_id = utils.random_string()
+        account_id = random_string()
         error_response = {
             'Error': {
                 'Code': 'ConditionalCheckFailedException'
@@ -93,7 +92,7 @@ class FungibleTokenManagerTest(TestCase):
         self.assertRaises(CapacityExhaustedException, self.manager.get_token, account_id)
 
     def test_refill_bucket_tokens(self):
-        account_id = utils.random_string()
+        account_id = random_string()
         tokens = 8
         refill_time = int(time.time())
 
@@ -107,17 +106,19 @@ class FungibleTokenManagerTest(TestCase):
         self.assertEquals(1, len(actual_args))
 
         expected_args = [
-            ({'Key': {
-                'resourceName': self.resource_name,
-                'accountId': account_id
-            },
-            'UpdateExpression': 'set tokens = :tokens, lastRefill = :refill_time',
-            'ConditionExpression': 'lastRefill < :refill_time',
-            'ExpressionAttributeValues': {
-                ':tokens': tokens,
-                ':refill_time': refill_time
-            },
-            'ReturnValues': 'NONE'})
+            ({
+                'Key': {
+                    'resourceName': self.resource_name,
+                    'accountId': account_id
+                },
+                'UpdateExpression': 'set tokens = :tokens, lastRefill = :refill_time',
+                'ConditionExpression': 'lastRefill < :refill_time',
+                'ExpressionAttributeValues': {
+                    ':tokens': tokens,
+                    ':refill_time': refill_time
+                },
+                'ReturnValues': 'NONE'
+            })
         ]
 
         self.assertEquals(expected_args, actual_args[0])

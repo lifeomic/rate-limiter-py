@@ -1,7 +1,6 @@
 #!/bin/bash/env python
-
 import boto3
 
 def dynamodb():
-    boto3.setup_default_session(region_name='us-east-1')
+    """ Create a DynamoDB resource instance. """
     return boto3.resource('dynamodb')
