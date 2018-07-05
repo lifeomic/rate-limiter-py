@@ -3,6 +3,12 @@ import os
 from limiter.managers import FungibleTokenManager, NonFungibleTokenManager
 
 class BaseTokenLimiter(object):
+    """
+    Base class for both fungible and non-fungible token limiters.
+
+    Args:
+        resource_name (str): Name of the resource being rate-limited.
+    """
     def __init__(self, resource_name):
         self.resource_name = resource_name
         self._manager = None
@@ -99,6 +105,7 @@ class FungibleTokenContextManager(BaseFungibleTokenLimiter):
         pass
 
     def get_token(self):
+        """ Check the limit and claim a token """
         self.manager.get_token(self.account_id)
 
 class FungibleTokenLimiterDecorator(BaseFungibleTokenLimiter):
@@ -171,12 +178,39 @@ class FungibleTokenLimiterDecorator(BaseFungibleTokenLimiter):
         return rate_limited_func
 
 class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
+    """
+    Non-fungible token rate-limiter implemented as a context manager.
+
+    This class does not create tokens. Rather, it creates instances of TokenReservation which are able to create
+    a single token. If the context is exited due to an exception, the token reservation will be deleted and the
+    exception propogated.
+
+    Args:
+        resource_name (str): Name of the resource being rate-limited.
+        account_id (str): The account to create a reservation on behalf of.
+        table_name (str): Name of the DynamoDB table.
+                          Can be set via environment variable `NON_FUNG_TABLE_NAME`. Defaults to None.
+        limit (int): The maximum number of tokens/reservations that may be available.
+                     Can be set via environment variable `NON_FUNG_LIMIT`. Defaults to None.
+
+    Note:
+        This class is exported with the more succinct name `non_fungible_limiter`
+
+    Examples:
+        This example assumes `table_name` and `limit` have been set via environment variables.
+
+        >>> from limiter import non_fungible_limiter
+        >>> with non_fungible_limiter('my-resource', 'my-account') as reservation:
+        ...   emr_cluster_id = create_emr_cluster()
+        ...   reservation.create_token(emr_cluster_id)
+        ...   print 'Done!'
+        Done!
+    """
     def __init__(self,
                  resource_name,
                  account_id,
                  table_name=None,
-                 limit=None,
-                 expiration=None):
+                 limit=None):
         super(NonFungibleTokenLimiterContextManager, self).__init__(resource_name)
 
         self.account_id = account_id
@@ -201,6 +235,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
             self.reservation.delete()
 
     def get_reservation(self):
+        """ Check the limit and create a reservation """
         return self.manager.get_reservation(self.account_id)
 
 non_fungible_context_manager = NonFungibleTokenLimiterContextManager

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-from moto import mock_dynamodb2
-import boto3
 import uuid
 from unittest import TestCase
 from test.utils import random_string, now_utc_sec
+from moto import mock_dynamodb2
 from mock import Mock, MagicMock
 from botocore.exceptions import ClientError
+import boto3
 from boto3.dynamodb.conditions import Key
 from limiter.managers import FungibleTokenManager, NonFungibleTokenManager, TokenReservation
 from limiter.exceptions import CapacityExhaustedException
@@ -167,7 +167,7 @@ class NonFungibleTokenManagerTest(TestCase):
                 'resourceCoordinate': coordinate,
                 'resourceName': self.resource_name,
                 'accountId': account_id,
-                'resourceId': random_string(),
+                'resourceId': 'resource-' + str(i),
                 'expirationTime': now + 10000
             }
             mock_table.put_item(Item=token)
@@ -220,7 +220,6 @@ class NonFungibleTokenManagerTest(TestCase):
     def test_get_token_count_no_tokens(self):
         now = now_utc_sec()
         account_id = random_string()
-        coordinate = '{}:{}'.format(self.resource_name, account_id)
         mock_table = _creat_mock_table(self.table)
         expected_count = 0
 
@@ -242,7 +241,7 @@ class TokenReservationTest(TestCase):
         mock_table = _creat_mock_table(self.table_name)
 
         reservation = TokenReservation(self.res_id, mock_table, self.resource_name, self.account_id, self.coordinate)
-        self._insert_reservation(mock_table, reservation)
+        _insert_reservation(mock_table, reservation)
 
         response = mock_table.query(KeyConditionExpression=Key('resourceCoordinate').eq(self.coordinate))
         self.assertEquals(1, response['Count'])
@@ -270,15 +269,15 @@ class TokenReservationTest(TestCase):
         reservation.create_token(random_string())
         self.assertRaises(ValueError, reservation.create_token, random_string())
 
-    def _insert_reservation(self, mock_table, reservation):
-        reservation_item = {
-            'resourceCoordinate': reservation.coordinate,
-            'resourceName': reservation.resource_name,
-            'accountId': reservation.account_id,
-            'resourceId': reservation.id,
-            'expirationTime': now_utc_sec() + 300
-        }
-        mock_table.put_item(Item=reservation_item)
+def _insert_reservation(mock_table, reservation):
+    reservation_item = {
+        'resourceCoordinate': reservation.coordinate,
+        'resourceName': reservation.resource_name,
+        'accountId': reservation.account_id,
+        'resourceId': reservation.id,
+        'expirationTime': now_utc_sec() + 300
+    }
+    mock_table.put_item(Item=reservation_item)
 
 def _creat_mock_table(table_name):
     mock_client = boto3.client('dynamodb', region_name='us-east-1')

@@ -202,8 +202,9 @@ class NonFungibleTokenLimiterContextManagerTest(BaseLimiterTest):
 
         try:
             with non_fungible_limiter(self.resource_name, self.account_id, self.table_name, self.limit) as reservation:
+                self.assertNotNone(reservation)
                 raise StandardError('Deliberately thrown from test_delete_on_exception')
-        except:
+        except StandardError:
             pass
 
         mock_reservation.delete.assert_called()

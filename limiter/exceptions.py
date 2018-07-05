@@ -3,4 +3,5 @@ class CapacityExhaustedException(Exception):
     pass
 
 class ReservationNotFoundException(Exception):
+    """ Raised when the query result for a non-fungible token reservation is empty. """
     pass

@@ -10,6 +10,14 @@ from limiter.exceptions import CapacityExhaustedException, ReservationNotFoundEx
 logger = logging.getLogger()
 
 class BaseTokenManager(object):
+    """
+    Base class for both fungible and non-fungible token managers.
+
+    Args:
+        table_name (str): Name of the DynamoDB table.
+        resource_name (str): Name of the resource being rate-limited.
+        limit (int): The maximum number of tokens that may be available.
+    """
     def __init__(self, table_name, resource_name, limit):
         self.table_name = table_name
         self.resource_name = resource_name
@@ -174,10 +182,33 @@ class FungibleTokenManager(BaseTokenManager):
                 raise
 
 class NonFungibleTokenManager(BaseTokenManager):
-    def __init__(self, table_name, resource_name, limit):
-        super(NonFungibleTokenManager, self).__init__(table_name, resource_name, limit)
+    """
+    Creates reservations for and enforces limits on non-fungible tokens for a single resource stored in DynamoDB.
+
+    Unlike FungibleTokenManager, this class does not create tokens. Rather, it creates instances of
+    TokenReservation, a placeholder capable of creating a fully constructed token. Both reservations and complete
+    tokens count towards the resource limit. When a reservation is created, it is given a TTL of 300 seconds,
+    the maximum execution time of a lambda.
+
+    Args:
+        table_name (str): Name of the DynamoDB table.
+        resource_name (str): Name of the resource being rate-limited.
+        limit (int): The maximum number of tokens that may be available.
+    """
 
     def get_reservation(self, account_id):
+        """
+        Check the token limit and create a TokenReservation.
+
+        Args:
+            account_id (str): The account to retrieve a token on behalf of.
+
+        Returns:
+            TokenReservation: A reservation to create a token.
+
+        Raises:
+            CapacityExhaustedException: If the number of tokens and reservations are at the resource limit.
+        """
         exec_time = now_utc_sec()
         if self._get_token_count(account_id, exec_time) >= self.limit:
             message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
@@ -186,6 +217,20 @@ class NonFungibleTokenManager(BaseTokenManager):
         return self._build_reservation(account_id, exec_time)
 
     def _get_token_count(self, account_id, exec_time):
+        """
+        Get the number of tokens as reservations associated with this resource and the specified account.
+
+        Note:
+            Items in DynamoDB which have exceeded their TTL may still appear in query results. This necessitates
+            filtering on expirationTime.
+
+        Args:
+            account_id (str): The account to get the number of active tokens/reservations for this resource.
+            exec_time (int): Timestamp, in seconds, when the calling operation started.
+
+        Returns:
+            int: The number of tokens/reservations for this account on this resource.
+        """
         coordinate = self._buid_coordinate(account_id)
         return self.table.query(
             Select='COUNT',
@@ -195,6 +240,19 @@ class NonFungibleTokenManager(BaseTokenManager):
         )['Count']
 
     def _build_reservation(self, account_id, exec_time):
+        """
+        Insert a reservation into DynamoDB and build and instance of TokenReservation.
+
+        Note:
+            The reservation will be inserted with a TTL of 300 seconds.
+
+        Args:
+            account_id (str): The account to create the reservation on behalf of.
+            exec_time (int): Timestamp, in seconds, when the calling operation started.
+
+        Returns:
+            TokenReservation: Reservation to create a token on behalf of the specified account on this resource.
+        """
         id = str(uuid.uuid4())
         coordinate = self._buid_coordinate(account_id)
         expiration_time = exec_time + 300
@@ -211,9 +269,32 @@ class NonFungibleTokenManager(BaseTokenManager):
         return TokenReservation(id, self.table, self.resource_name, account_id, coordinate)
 
     def _buid_coordinate(self, account_id):
+        """
+        Build a token resource coordinate for this resource and the specified account.
+
+        Args:
+            account_id (str): Id of the account to synthesize the coordinate from.
+
+        Returns:
+            str: A coordinate value for this resource and the specified account.
+        """
         return '{}:{}'.format(self.resource_name, account_id)
 
 class TokenReservation(object):
+    """
+    Used to represent a temporary placeholder for, and create a non-fungible token, in DynamoDB.
+
+    Instances of this class represent a single placeholder token for a specific resource and account.
+    When a fully formed non-fungible token needs to be created from a reservation it will update the entry
+    in DynamoDB with the given resource id and extend its TTL.
+
+    Args:
+        id (str): Unique id of the reservation. This is used as the resource id until the full token is created.
+        table (boto3.Table): Instance of a boto3 DynamoDB table. This table contains the reservation entry.
+        resource_name (str): Name of the resource this reservation is on.
+        account_id (str): Account this reservation is for.
+        coordinate (str): Resource coordinate this reservation is representing.
+    """
     def __init__(self, id, table, resource_name, account_id, coordinate):
         self.id = id
         self.table = table
@@ -225,6 +306,20 @@ class TokenReservation(object):
         self.is_token_created = False
 
     def create_token(self, resource_id, expiration=28800):
+        """
+        Create a non-fungible token from this reservation.
+
+        The reservation entry in DynamoDB will be updated to use the given resource id as the token resource id
+        and extend the TTL.
+
+        Args:
+            resource_id (str): Id of the resource this token will represent, e.g. EMR cluster id.
+            expiration (int): The token TTL in seconds. Defaults to 28800 (8 hours).
+
+        Raises:
+            ValueError: If a token has already been created from this reservation, or this reservation has been deleted.
+            ReservationNotFoundException: If the reservation cannot be found in DynamoDB, likely meaning it expired.
+        """
         if self.is_token_created:
             raise ValueError('Token already created for {} from this reservation [{}]'.format(resource_id, self.id))
 
@@ -254,6 +349,17 @@ class TokenReservation(object):
             raise
 
     def delete(self):
+        """
+        Delete the entry in DynamoDB representing this reservation.
+        """
+        if self.is_token_created:
+            logger.warn('Cannot delete, a token has already been created from this reservation [%s]', self.id)
+            return
+
+        if self.is_deleted:
+            logger.warn('Cannot delete, this reservation [%s], has already been deleted', self.id)
+            return
+
         self.table.delete_item(
             Key={
                 'resourceCoordinate': self.coordinate,
@@ -264,4 +370,5 @@ class TokenReservation(object):
         self.is_deleted = True
 
 def now_utc_sec():
+    """ Get the number of seconds since the epoch """
     return int(datetime.utcnow().strftime('%s'))
