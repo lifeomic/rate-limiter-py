@@ -1,14 +1,38 @@
 #!/bin/bash/env python
 import logging
-import time
+import uuid
+from datetime import datetime
 from botocore.exceptions import ClientError
-
+from boto3.dynamodb.conditions import Key, Attr
 from limiter.clients import dynamodb
-from limiter.exceptions import CapacityExhaustedException
+from limiter.exceptions import CapacityExhaustedException, ReservationNotFoundException
 
 logger = logging.getLogger()
 
-class FungibleTokenManager(object):
+class BaseTokenManager(object):
+    def __init__(self, table_name, resource_name, limit):
+        self.table_name = table_name
+        self.resource_name = resource_name
+        self.limit = limit
+
+        self._client = None
+        self._table = None
+
+    @property
+    def client(self):
+        """ DynamoDB client """
+        if not self._client:
+            self._client = dynamodb()
+        return self._client
+
+    @property
+    def table(self):
+        """ DynamoDB Table containing token row """
+        if not self._table:
+            self._table = self.client.Table(self.table_name)
+        return self._table
+
+class FungibleTokenManager(BaseTokenManager):
     """
     Consumes, replenishes and enforces limits on fungible tokens for a single resource stored in a DynamoDB table.
 
@@ -35,28 +59,9 @@ class FungibleTokenManager(object):
     """
 
     def __init__(self, table_name, resource_name, limit, window):
-        self.table_name = table_name
-        self.resource_name = resource_name
-        self.limit = limit
+        super(FungibleTokenManager, self).__init__(table_name, resource_name, limit)
         self.window = window
         self.tokens_sec = float(limit) / window # Number of tokens the bucket will accumulate per second
-
-        self._client = None
-        self._table = None
-
-    @property
-    def client(self):
-        """ DynamoDB client """
-        if not self._client:
-            self._client = dynamodb()
-        return self._client
-
-    @property
-    def table(self):
-        """ DynamoDB Table containing token row """
-        if not self._table:
-            self._table = self.client.Table(self.table_name)
-        return self._table
 
     def get_token(self, account_id):
         """
@@ -74,7 +79,7 @@ class FungibleTokenManager(object):
             account_id (str): The account to retrieve a token on behalf of.
         """
 
-        exec_time = int(time.time())
+        exec_time = now_utc_sec()
         bucket = self._get_bucket_token(account_id, exec_time)
 
         current_tokens = bucket['tokens']
@@ -167,3 +172,96 @@ class FungibleTokenManager(object):
                             self.resource_name, account_id)
             else:
                 raise
+
+class NonFungibleTokenManager(BaseTokenManager):
+    def __init__(self, table_name, resource_name, limit):
+        super(NonFungibleTokenManager, self).__init__(table_name, resource_name, limit)
+
+    def get_reservation(self, account_id):
+        exec_time = now_utc_sec()
+        if self._get_token_count(account_id, exec_time) >= self.limit:
+            message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
+            raise CapacityExhaustedException(message)
+
+        return self._build_reservation(account_id, exec_time)
+
+    def _get_token_count(self, account_id, exec_time):
+        coordinate = self._buid_coordinate(account_id)
+        return self.table.query(
+            Select='COUNT',
+            ConsistentRead=True,
+            KeyConditionExpression=Key('resourceCoordinate').eq(coordinate),
+            FilterExpression=Attr('expirationTime').gt(exec_time)
+        )['Count']
+
+    def _build_reservation(self, account_id, exec_time):
+        id = str(uuid.uuid4())
+        coordinate = self._buid_coordinate(account_id)
+        expiration_time = exec_time + 300
+
+        self.table.put_item(
+            Item={
+                'resourceCoordinate': coordinate,
+                'resourceName': self.resource_name,
+                'accountId': account_id,
+                'resourceId': id,
+                'expirationTime': expiration_time
+            }
+        )
+        return TokenReservation(id, self.table, self.resource_name, account_id, coordinate)
+
+    def _buid_coordinate(self, account_id):
+        return '{}:{}'.format(self.resource_name, account_id)
+
+class TokenReservation(object):
+    def __init__(self, id, table, resource_name, account_id, coordinate):
+        self.id = id
+        self.table = table
+        self.resource_name = resource_name
+        self.account_id = account_id
+        self.coordinate = coordinate
+
+        self.is_deleted = False
+        self.is_token_created = False
+
+    def create_token(self, resource_id, expiration=28800):
+        if self.is_token_created:
+            raise ValueError('Token already created for {} from this reservation [{}]'.format(resource_id, self.id))
+
+        if self.is_deleted:
+            raise ValueError('This reservation [{}] has been deleted'.format(self.id))
+
+        try:
+            expiration_time = now_utc_sec() + expiration
+            self.table.update_item(
+                Key={
+                    'resourceCoordinate': self.coordinate,
+                    'resourceId': self.id
+                },
+                UpdateExpression='set expirationTime = :exp_time, set resourceId = :resource_id',
+                ExpressionAttributeValues={
+                    ':exp_time': expiration_time,
+                    ':reserve_id': self.id,
+                    ':resource_id': resource_id
+                },
+                ReturnValues='ALL_NEW'
+            )
+            self.is_token_created = True
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                msg_fmt = 'Reservation {} not found for {}:{}. Possibly expired'
+                raise ReservationNotFoundException(msg_fmt.format(self.id, self.resource_name, self.account_id))
+            raise
+
+    def delete(self):
+        self.table.delete_item(
+            Key={
+                'resourceCoordinate': self.coordinate,
+                'resourceId': self.id
+            },
+            ReturnValues='NONE'
+        )
+        self.is_deleted = True
+
+def now_utc_sec():
+    return int(datetime.utcnow().strftime('%s'))

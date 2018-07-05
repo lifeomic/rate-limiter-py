@@ -1,4 +1,5 @@
-from .limiters import context_manager, decorator
+from .limiters import non_fungible_context_manager, fungible_context_manager, decorator
 
-fungible_limiter = context_manager
+non_fungible_limiter = non_fungible_context_manager
+fungible_limiter = fungible_context_manager
 rate_limit = decorator

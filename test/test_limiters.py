@@ -3,7 +3,8 @@ from test.utils import random_string
 from unittest import TestCase
 from mock import Mock, MagicMock, patch
 
-from limiter import rate_limit, fungible_limiter
+from limiter import rate_limit, fungible_limiter, non_fungible_limiter
+from limiter.managers import TokenReservation
 
 class BaseLimiterTest(TestCase):
     def setUp(self):
@@ -156,3 +157,53 @@ class FungibleTokenLimiterContextManagerTest(BaseLimiterTest):
 
             with fungible_limiter(self.resource_name, self.account_id):
                 mock_manager.get_token.assert_called_with(self.account_id)
+
+class NonFungibleTokenLimiterContextManagerTest(BaseLimiterTest):
+    def setUp(self):
+        super(NonFungibleTokenLimiterContextManagerTest, self).setUp()
+        self.account_id = random_string()
+
+    @patch('limiter.limiters.NonFungibleTokenManager')
+    def test_get_token_ctor_params(self, mock_manager_delegate):
+        mock_manager = Mock()
+        empty_reservation = TokenReservation(None, None, None, None, None)
+        mock_manager.get_reservation = MagicMock(return_value=empty_reservation)
+        mock_manager_delegate.return_value = mock_manager
+
+        with non_fungible_limiter(self.resource_name, self.account_id, self.table_name, self.limit) as reservation:
+            mock_manager.get_reservation.assert_called_with(self.account_id)
+            self.assertIs(empty_reservation, reservation)
+
+    @patch('limiter.limiters.NonFungibleTokenManager')
+    def test_get_token_env_params(self, mock_manager_delegate):
+        env_vars = {
+            'NON_FUNG_TABLE_NAME': str(self.table_name),
+            'NON_FUNG_LIMIT': str(self.limit)
+        }
+
+        with patch.dict('os.environ', env_vars):
+            mock_manager = Mock()
+            empty_reservation = TokenReservation(None, None, None, None, None)
+            mock_manager.get_reservation = MagicMock(return_value=empty_reservation)
+            mock_manager_delegate.return_value = mock_manager
+
+            with non_fungible_limiter(self.resource_name, self.account_id) as reservation:
+                mock_manager.get_reservation.assert_called_with(self.account_id)
+                self.assertIs(empty_reservation, reservation)
+
+    @patch('limiter.limiters.NonFungibleTokenManager')
+    def test_delete_on_exception(self, mock_manager_delegate):
+        mock_manager = Mock()
+        mock_reservation = Mock()
+        mock_reservation.delete = Mock()
+
+        mock_manager.get_reservation = MagicMock(return_value=mock_reservation)
+        mock_manager_delegate.return_value = mock_manager
+
+        try:
+            with non_fungible_limiter(self.resource_name, self.account_id, self.table_name, self.limit) as reservation:
+                raise StandardError('Deliberately thrown from test_delete_on_exception')
+        except:
+            pass
+
+        mock_reservation.delete.assert_called()

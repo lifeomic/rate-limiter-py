@@ -1,35 +1,11 @@
 #!/usr/bin/env python
 import os
-from limiter.managers import FungibleTokenManager
+from limiter.managers import FungibleTokenManager, NonFungibleTokenManager
 
-class BaseFungibleTokenLimiter(object):
-    """
-    Extensions of this class provide the most convient usages for rate limiting implementations, e.g. a decorator
-
-    Args:
-        resource_name (str): Name of the resource being rate-limited.
-        table_name (str): Name of the DynamoDB table.
-                          Can be set via environment variable `FUNG_TABLE_NAME`. Defaults to None.
-        limit (int): The maximum number of tokens that may be available.
-                     Can be set via environment variable `FUNG_LIMIT`. Defaults to None.
-        window (int): Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available.
-                      Can be set via environment variable `FUNG_WINDOW`. Defaults to None.
-    """
-    def __init__(self, resource_name, table_name=None, limit=None, window=None):
+class BaseTokenLimiter(object):
+    def __init__(self, resource_name):
         self.resource_name = resource_name
-
-        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'FUNG_TABLE_NAME')
-        self.limit = int(self._validate_required_env_fallback(limit, 'limit', 'FUNG_LIMIT'))
-        self.window = int(self._validate_required_env_fallback(window, 'window', 'FUNG_WINDOW'))
-
         self._manager = None
-
-    @property
-    def manager(self):
-        """ Fungible token manager """
-        if not self._manager:
-            self._manager = FungibleTokenManager(self.table_name, self.resource_name, self.limit, self.window)
-        return self._manager
 
     def _validate_required_env_fallback(self, param_value, param_name, env_var):
         """
@@ -53,6 +29,33 @@ class BaseFungibleTokenLimiter(object):
 
         msg_format = 'Failed to create limiter for {}. {} must be passed to the decorator or set environment var: {}'
         raise ValueError(msg_format.format(self.resource_name, param_name, env_var))
+
+class BaseFungibleTokenLimiter(BaseTokenLimiter):
+    """
+    Extensions of this class provide the most convient usages for rate limiting implementations, e.g. a decorator
+
+    Args:
+        resource_name (str): Name of the resource being rate-limited.
+        table_name (str): Name of the DynamoDB table.
+                          Can be set via environment variable `FUNG_TABLE_NAME`. Defaults to None.
+        limit (int): The maximum number of tokens that may be available.
+                     Can be set via environment variable `FUNG_LIMIT`. Defaults to None.
+        window (int): Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available.
+                      Can be set via environment variable `FUNG_WINDOW`. Defaults to None.
+    """
+    def __init__(self, resource_name, table_name=None, limit=None, window=None):
+        super(BaseFungibleTokenLimiter, self).__init__(resource_name)
+
+        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'FUNG_TABLE_NAME')
+        self.limit = int(self._validate_required_env_fallback(limit, 'limit', 'FUNG_LIMIT'))
+        self.window = int(self._validate_required_env_fallback(window, 'window', 'FUNG_WINDOW'))
+
+    @property
+    def manager(self):
+        """ Fungible token manager """
+        if not self._manager:
+            self._manager = FungibleTokenManager(self.table_name, self.resource_name, self.limit, self.window)
+        return self._manager
 
 class FungibleTokenContextManager(BaseFungibleTokenLimiter):
     """
@@ -90,10 +93,13 @@ class FungibleTokenContextManager(BaseFungibleTokenLimiter):
         self.account_id = account_id
 
     def __enter__(self):
-        self.manager.get_token(self.account_id)
+        self.get_token()
 
     def __exit__(self, *args):
         pass
+
+    def get_token(self):
+        self.manager.get_token(self.account_id)
 
 class FungibleTokenLimiterDecorator(BaseFungibleTokenLimiter):
     """
@@ -164,5 +170,39 @@ class FungibleTokenLimiterDecorator(BaseFungibleTokenLimiter):
             return func_to_limit(*args, **kwargs)
         return rate_limited_func
 
-context_manager = FungibleTokenContextManager
+class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
+    def __init__(self,
+                 resource_name,
+                 account_id,
+                 table_name=None,
+                 limit=None,
+                 expiration=None):
+        super(NonFungibleTokenLimiterContextManager, self).__init__(resource_name)
+
+        self.account_id = account_id
+        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'NON_FUNG_TABLE_NAME')
+        self.limit = int(self._validate_required_env_fallback(limit, 'limit', 'NON_FUNG_LIMIT'))
+
+        self.reservation = None
+
+    @property
+    def manager(self):
+        """ Non-fungible token manager """
+        if not self._manager:
+            self._manager = NonFungibleTokenManager(self.table_name, self.resource_name, self.limit)
+        return self._manager
+
+    def __enter__(self):
+        self.reservation = self.get_reservation()
+        return self.reservation
+
+    def __exit__(self, *args):
+        if any(args):
+            self.reservation.delete()
+
+    def get_reservation(self):
+        return self.manager.get_reservation(self.account_id)
+
+non_fungible_context_manager = NonFungibleTokenLimiterContextManager
+fungible_context_manager = FungibleTokenContextManager
 decorator = FungibleTokenLimiterDecorator
