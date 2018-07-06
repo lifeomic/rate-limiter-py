@@ -1,5 +1,5 @@
 class CapacityExhaustedException(Exception):
-    """ Raised when a token is requested by none are available. """
+    """ Raised when a token is requested but none are available. """
     pass
 
 class ReservationNotFoundException(Exception):
