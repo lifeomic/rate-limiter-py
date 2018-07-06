@@ -12,7 +12,7 @@ or non-fungible tokens. The former are interchangeable and thus can
 make use of time-based expiration to restore capacity.
 The latter are unique and require explicit removal to restore capacity.
 
-For fungible tokens, the limiter leverages the leaky token bucket algorithm,
+For fungible tokens, the limiter leverages the token bucket algorithm,
 tracking resource usage by acquiring and replenishing tokens for each unit of capacity.
 
 For non-fungible tokens, the limiter creates a new token for each resource.
