@@ -9,6 +9,15 @@ from limiter.exceptions import CapacityExhaustedException, ReservationNotFoundEx
 
 logger = logging.getLogger()
 
+# Dynamo table columns
+RESOURCE_NAME = 'resourceName'
+ACCOUNT_ID = 'accountId'
+TOKENS = 'tokens'
+LAST_REFILL = 'lastRefill'
+RESOURCE_COORDINATE = 'resourceCoordinate'
+RESOURCE_ID = 'resourceId'
+EXPIRATION_TIME = 'expirationTime'
+
 class BaseTokenManager(object):
     """
     Base class for both fungible and non-fungible token managers.
@@ -90,7 +99,7 @@ class FungibleTokenManager(BaseTokenManager):
         exec_time = now_utc_sec()
         bucket = self._get_bucket_token(account_id, exec_time)
 
-        current_tokens = bucket['tokens']
+        current_tokens = bucket[TOKENS]
         last_refill = int(bucket.get('last_refill', 0)) # If the row has not been created yet, use 0
         refill_tokens = self._compute_refill_amount(current_tokens, last_refill, exec_time)
 
@@ -111,13 +120,15 @@ class FungibleTokenManager(BaseTokenManager):
             CapacityExhaustedException: If no more tokens can be taken.
         """
         try:
+            update_exp = 'add {} :dec'.format(TOKENS)
+            condition_exp = '{0} > :min OR {1} < :failsafe OR attribute_not_exists({0})'.format(TOKENS, LAST_REFILL)
             return self.table.update_item(
                 Key={
-                    'resourceName': self.resource_name,
-                    'accountId': account_id
+                    RESOURCE_NAME: self.resource_name,
+                    ACCOUNT_ID: account_id
                 },
-                UpdateExpression='add tokens :dec',
-                ConditionExpression='tokens > :min OR lastRefill < :failsafe OR attribute_not_exists(tokens)',
+                UpdateExpression=update_exp,
+                ConditionExpression=condition_exp,
                 ExpressionAttributeValues={
                     ':dec': -1,
                     ':min': 0,
@@ -161,13 +172,15 @@ class FungibleTokenManager(BaseTokenManager):
             dict: State of the bucket after refilling the tokens, if the refill succeeded, None otherwise.
         """
         try:
+            update_exp = 'set {} = :tokens, {} = :refill_time'.format(TOKENS, LAST_REFILL)
+            condition_exp = '{} < :refill_time'.format(LAST_REFILL)
             self.table.update_item(
                 Key={
-                    'resourceName': self.resource_name,
-                    'accountId': account_id
+                    RESOURCE_NAME: self.resource_name,
+                    ACCOUNT_ID: account_id
                 },
-                UpdateExpression='set tokens = :tokens, lastRefill = :refill_time',
-                ConditionExpression='lastRefill < :refill_time',
+                UpdateExpression=update_exp,
+                ConditionExpression=condition_exp,
                 ExpressionAttributeValues={
                     ':tokens': tokens,
                     ':refill_time': refill_time
@@ -175,7 +188,7 @@ class FungibleTokenManager(BaseTokenManager):
                 ReturnValues='NONE'
             )
         except ClientError as e:
-            if e.response['Error']['Code'] == "ConditionalCheckFailedException":
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
                 logger.warn('Failed to refill tokens for %s:%s, someone else already refilled with more current state',
                             self.resource_name, account_id)
             else:
@@ -235,8 +248,8 @@ class NonFungibleTokenManager(BaseTokenManager):
         return self.table.query(
             Select='COUNT',
             ConsistentRead=True,
-            KeyConditionExpression=Key('resourceCoordinate').eq(coordinate),
-            FilterExpression=Attr('expirationTime').gt(exec_time)
+            KeyConditionExpression=Key(RESOURCE_COORDINATE).eq(coordinate),
+            FilterExpression=Attr(EXPIRATION_TIME).gt(exec_time)
         )['Count']
 
     def _build_reservation(self, account_id, exec_time):
@@ -259,11 +272,11 @@ class NonFungibleTokenManager(BaseTokenManager):
 
         self.table.put_item(
             Item={
-                'resourceCoordinate': coordinate,
-                'resourceName': self.resource_name,
-                'accountId': account_id,
-                'resourceId': id,
-                'expirationTime': expiration_time
+                RESOURCE_COORDINATE: coordinate,
+                RESOURCE_NAME: self.resource_name,
+                ACCOUNT_ID: account_id,
+                RESOURCE_ID: id,
+                EXPIRATION_TIME: expiration_time
             }
         )
         return TokenReservation(id, self.table, self.resource_name, account_id, coordinate)
@@ -328,12 +341,13 @@ class TokenReservation(object):
 
         try:
             expiration_time = now_utc_sec() + expiration
+            update_exp = 'set {} = :exp_time, set {} = :resource_id'.format(EXPIRATION_TIME, RESOURCE_ID)
             self.table.update_item(
                 Key={
-                    'resourceCoordinate': self.coordinate,
-                    'resourceId': self.id
+                    RESOURCE_COORDINATE: self.coordinate,
+                    RESOURCE_ID: self.id
                 },
-                UpdateExpression='set expirationTime = :exp_time, set resourceId = :resource_id',
+                UpdateExpression=update_exp,
                 ExpressionAttributeValues={
                     ':exp_time': expiration_time,
                     ':reserve_id': self.id,
@@ -362,8 +376,8 @@ class TokenReservation(object):
 
         self.table.delete_item(
             Key={
-                'resourceCoordinate': self.coordinate,
-                'resourceId': self.id
+                RESOURCE_COORDINATE: self.coordinate,
+                RESOURCE_ID: self.id
             },
             ReturnValues='NONE'
         )
