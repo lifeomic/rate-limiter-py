@@ -190,7 +190,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
         account_id (str): The account to create a reservation on behalf of.
         table_name (str): Name of the DynamoDB table.
                           Can be set via environment variable `NON_FUNG_TABLE_NAME`. Defaults to None.
-        limit (int): The maximum number of tokens/reservations that may be available.
+        limit (int): The maximum number of tokens/reservations that may be present.
                      Can be set via environment variable `NON_FUNG_LIMIT`. Defaults to None.
 
     Note:
