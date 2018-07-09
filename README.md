@@ -31,12 +31,13 @@ The expected table schema is detailed below.
 
 These are all the expected table attributes, including the keys.
 
-| Attribute Name | Data Type | Description                                         |
-|----------------|-----------|-----------------------------------------------------|
-| resourceName   | String    | User-defined name of the rate limited resource      |
-| accountId      | String    | Id of the entity which created the resource         |
-| tokens         | Number    | Number of tokens available                          |
-| lastRefill     | Number    | Timestamp, in sec, when the tokens were replenished |
+| Attribute Name | Data Type | Description                                                  |
+|----------------|-----------|--------------------------------------------------------------|
+| resourceName   | String    | User-defined name of the rate limited resource               |
+| accountId      | String    | Id of the entity which created the resource                  |
+| tokens         | Number    | Number of tokens available                                   |
+| lastRefill     | Number    | Timestamp, in milliseconds, when the tokens were replenished |
+| lastToken      | Number    | Timestamp, in milliseconds, when the last token was taken    |
 
 
 #### Keys
@@ -228,3 +229,22 @@ def invoke_my_resource(account_id):
 The recommended architecture for detecting the termination of and removing tokenized
 resources is via a Lambda consuming CloudWatch events. Details and examples coming
 in the next set of changes.
+
+## Development
+
+### Dependencies
+The dependencies needed for local development (running unit tests, etc.) are contained in `dev_requirements.txt` and
+can be installed via pip: `pip install -r dev_requirements.txt`.
+
+### Unit Tests
+Running the unit tests is done via a recipe in the `makefile`, the command: `make test`.
+The unit tests are run with [nose](http://nose.readthedocs.io/en/latest/) inside a virtual environment managed
+by [tox](https://pypi.python.org/pypi/tox). The `test_requirements.txt` contains all the testing dependencies and
+is used to pip install everything needed by the tests in the tox environments (tox installs these dependencies).
+
+### Code Hygiene
+The `make check` command will run [pylint](https://www.pylint.org/) with standards defined in `pylintrc`.
+This is a measurable way to enforce style and standards.
+
+### Cleanup
+Run `make clean` to remove artifacts leftover by tox and pylint.

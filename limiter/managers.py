@@ -14,6 +14,7 @@ RESOURCE_NAME = 'resourceName'
 ACCOUNT_ID = 'accountId'
 TOKENS = 'tokens'
 LAST_REFILL = 'lastRefill'
+LAST_TOKEN = 'lastToken'
 RESOURCE_COORDINATE = 'resourceCoordinate'
 RESOURCE_ID = 'resourceId'
 EXPIRATION_TIME = 'expirationTime'
@@ -59,14 +60,20 @@ class FungibleTokenManager(BaseTokenManager):
     One of three conditions must be true for the token count to be decremented.
     1.  The number of tokens is greater than 0.
 
-    2.  The current time is greater than the last refill time, plus the `window`.
+    2.  The `lastToken` timestamp is less than the current time - number of milliseconds to accumulate a new token.
         This condition is necessary to ensure clients will still be able to
         access resources when tokens fail to be refilled.
+        Note, the minimum number of "accumulation" milliseconds is 1.
 
     3.  The `tokens` column does not exist. This signifies the row, or bucket, has not been created yet.
 
     After the manager successfully obtains a token it will add back the number of tokens accumulated
     since the last refill. Updates will be conditionally applied based on last refill time, with stale updates failing.
+
+    Note:
+        While constructor's window arguement is expressed in seconds, this class internally represents time in
+        milliseconds. The schism enables more granular token rates but makes the API easier to use as
+        most limits are expressed in seconds.
 
     Args:
         table_name (str): Name of the DynamoDB table.
@@ -77,8 +84,9 @@ class FungibleTokenManager(BaseTokenManager):
 
     def __init__(self, table_name, resource_name, limit, window):
         super(FungibleTokenManager, self).__init__(table_name, resource_name, limit)
-        self.window = window
-        self.tokens_sec = float(limit) / window # Number of tokens the bucket will accumulate per second
+        self.window = window * 1000
+        self.tokens_ms = float(limit) / self.window # Number of tokens the bucket will accumulate per millisecond
+        self.ms_token = max(1, float(self.window) / limit) # Number of milliseconds to accumulate a new token
 
     def get_token(self, account_id):
         """
@@ -96,7 +104,7 @@ class FungibleTokenManager(BaseTokenManager):
             account_id (str): The account to retrieve a token on behalf of.
         """
 
-        exec_time = now_utc_sec()
+        exec_time = now_utc_ms()
         bucket = self._get_bucket_token(account_id, exec_time)
 
         current_tokens = bucket[TOKENS]
@@ -111,7 +119,7 @@ class FungibleTokenManager(BaseTokenManager):
 
         Args:
           account_id (str): The account to retrieve a token on behalf of.
-          exec_time (int): Time, in seconds, when the token retrieval started.
+          exec_time (int): Time, in milliseconds, when the token retrieval started.
 
         Returns:
             dict: State of the bucket after removing a token.
@@ -120,8 +128,8 @@ class FungibleTokenManager(BaseTokenManager):
             CapacityExhaustedException: If no more tokens can be taken.
         """
         try:
-            update_exp = 'add {} :dec'.format(TOKENS)
-            condition_exp = '{0} > :min OR {1} < :failsafe OR attribute_not_exists({0})'.format(TOKENS, LAST_REFILL)
+            update_exp = 'add {} :dec, set {} :exec_time'.format(TOKENS, LAST_TOKEN)
+            condition_exp = '{0} > :min OR {1} < :failsafe OR attribute_not_exists({0})'.format(TOKENS, LAST_TOKEN)
             return self.table.update_item(
                 Key={
                     RESOURCE_NAME: self.resource_name,
@@ -132,7 +140,8 @@ class FungibleTokenManager(BaseTokenManager):
                 ExpressionAttributeValues={
                     ':dec': -1,
                     ':min': 0,
-                    ':failsafe': exec_time - self.window
+                    ':failsafe': exec_time - self.ms_token,
+                    ':exec_time': exec_time
                 },
                 ReturnValues='ALL_NEW'
             )['Attributes']
@@ -148,8 +157,8 @@ class FungibleTokenManager(BaseTokenManager):
 
         Args:
           current_tokens (int): The number of tokens currently in the bucket.
-          last_refill (int): Timestamp, in seconds, since the last time the bucket was refilled.
-          exec_time: Time, in seconds, when the token retrieval started.
+          last_refill (int): Timestamp, in milliseconds, since the last time the bucket was refilled.
+          exec_time: Time, in milliseconds, when the token retrieval started.
 
         Returns:
             int: The number of tokens accumulated since the last refill.
@@ -157,7 +166,7 @@ class FungibleTokenManager(BaseTokenManager):
         tokens = max(0, current_tokens) # Tokens can be negative on bucket creation or a prolonged failure to refill
         time_since_refill = exec_time - last_refill
 
-        return min(self.limit - 1, tokens + int(self.tokens_sec * time_since_refill))
+        return min(self.limit - 1, tokens + int(self.tokens_ms * time_since_refill))
 
     def _refill_bucket_tokens(self, account_id, tokens, refill_time):
         """
@@ -166,7 +175,7 @@ class FungibleTokenManager(BaseTokenManager):
         Args:
           account_id (str): Account which owns the bucket to be refilled.
           tokens (int): The new token balance.
-          refill_time (int): Time, in seconds, when the token retrieval started.
+          refill_time (int): Time, in milliseconds, when the token retrieval started.
 
         Returns:
             dict: State of the bucket after refilling the tokens, if the refill succeeded, None otherwise.
@@ -386,3 +395,7 @@ class TokenReservation(object):
 def now_utc_sec():
     """ Get the number of seconds since the epoch """
     return int(datetime.utcnow().strftime('%s'))
+
+def now_utc_ms():
+    """ Get the number of milliseconds since the epoch """
+    return round(float(datetime.utcnow().strftime('%s.%f')) * 1000)

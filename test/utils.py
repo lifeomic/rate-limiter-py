@@ -8,3 +8,6 @@ def random_string(length=8):
 
 def now_utc_sec():
     return int(datetime.utcnow().strftime('%s'))
+
+def now_utc_ms():
+    return round(float(datetime.utcnow().strftime('%s.%f')) * 1000)

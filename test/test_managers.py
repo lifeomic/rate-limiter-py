@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import uuid
 from unittest import TestCase
-from test.utils import random_string, now_utc_sec
+from test.utils import random_string, now_utc_sec, now_utc_ms
 from moto import mock_dynamodb2
 from mock import Mock, MagicMock
 from botocore.exceptions import ClientError
@@ -20,8 +20,8 @@ class FungibleTokenManagerTest(TestCase):
 
     def test_compute_refill_amount(self):
         current_tokens = 5
-        last_refill = 1530111500
-        exec_time = last_refill + 30
+        last_refill = 1530111500000
+        exec_time = last_refill + 30000
 
         expected = 8
         actual = self.manager._compute_refill_amount(current_tokens, last_refill, exec_time)
@@ -29,8 +29,8 @@ class FungibleTokenManagerTest(TestCase):
 
     def test_compute_refill_amount_negative_balance(self):
         current_tokens = -7
-        last_refill = 1530111500
-        exec_time = last_refill + 30
+        last_refill = 1530111500000
+        exec_time = last_refill + 30000
 
         expected = 3
         actual = self.manager._compute_refill_amount(current_tokens, last_refill, exec_time)
@@ -38,8 +38,8 @@ class FungibleTokenManagerTest(TestCase):
 
     def test_compute_refill_amount_refill_lag(self):
         current_tokens = 0
-        last_refill = 1530100000
-        exec_time = last_refill + 11500
+        last_refill = 1530100000000
+        exec_time = last_refill + 11500000
 
         expected = self.limit - 1
         actual = self.manager._compute_refill_amount(current_tokens, last_refill, exec_time)
@@ -47,7 +47,7 @@ class FungibleTokenManagerTest(TestCase):
 
     def test_get_bucket_token(self):
         account_id = random_string()
-        exec_time = now_utc_sec()
+        exec_time = now_utc_ms()
 
         expected = {'tokens': 5, 'last_refill': now_utc_sec()}
         response = {'Attributes': expected}
@@ -67,12 +67,13 @@ class FungibleTokenManagerTest(TestCase):
                     'resourceName': self.resource_name,
                     'accountId': account_id
                 },
-                'UpdateExpression': 'add tokens :dec',
-                'ConditionExpression': 'tokens > :min OR lastRefill < :failsafe OR attribute_not_exists(tokens)',
+                'UpdateExpression': 'add tokens :dec, set lastToken :exec_time',
+                'ConditionExpression': 'tokens > :min OR lastToken < :failsafe OR attribute_not_exists(tokens)',
                 'ExpressionAttributeValues': {
                     ':dec': -1,
                     ':min': 0,
-                    ':failsafe': exec_time - self.manager.window
+                    ':failsafe': exec_time - self.manager.ms_token,
+                    ':exec_time': exec_time
                 },
                 'ReturnValues': 'ALL_NEW'
             })
@@ -97,7 +98,7 @@ class FungibleTokenManagerTest(TestCase):
     def test_refill_bucket_tokens(self):
         account_id = random_string()
         tokens = 8
-        refill_time = now_utc_sec()
+        refill_time = now_utc_ms()
 
         mock_table = Mock()
         mock_table.update_item = Mock()
