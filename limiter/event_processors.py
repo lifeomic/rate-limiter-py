@@ -288,15 +288,10 @@ def _reduce_to_path(obj, path):
         path (str): Location of the value to extract.
 
     Examples:
-        To get "bat" from the below object
-            {
-                "foo" : {
-                    "bar" : {
-                        "bat" : "something_important"
-                    }
-                }
-            }
-        use the path: "foo.bar.bat"
+        >>> obj = {'foo': {'bar': {'bat': 'SomethingImportant'}}}
+        >>> path = 'foo.bar.bat'
+        >>> _reduce_to_path(obj, path)
+        SomethingImportant
 
     Returns:
         str: If the path is valid, otherwise None.
