@@ -13,7 +13,7 @@ class ProcessorPredicate(object):
     Determines if an event matches a specific criteria.
 
     Instances of this class are used to determine if an event value, at the specified
-    path, evaluates to True by the given function. Instances my also be composed of additional
+    path, evaluates to True by the given function. Instances may also be composed of additional
     predicates. The additional predicates are either conjunctive (and) or disjunctive (or).
 
     Args:
