@@ -75,7 +75,7 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
 
     def test_manager_config_env_params(self):
         env_vars = {
-            'FUNG_TABLE_NAME': str(self.table_name),
+            'FUNG_TABLE': str(self.table_name),
             'FUNG_LIMIT': str(self.limit),
             'FUNG_WINDOW': str(self.window)
         }
@@ -145,7 +145,7 @@ class FungibleTokenLimiterContextManagerTest(BaseLimiterTest):
     @patch('limiter.limiters.FungibleTokenManager')
     def test_get_token_env_params(self, mock_manager_delegate):
         env_vars = {
-            'FUNG_TABLE_NAME': str(self.table_name),
+            'FUNG_TABLE': str(self.table_name),
             'FUNG_LIMIT': str(self.limit),
             'FUNG_WINDOW': str(self.window)
         }
@@ -177,7 +177,7 @@ class NonFungibleTokenLimiterContextManagerTest(BaseLimiterTest):
     @patch('limiter.limiters.NonFungibleTokenManager')
     def test_get_token_env_params(self, mock_manager_delegate):
         env_vars = {
-            'NON_FUNG_TABLE_NAME': str(self.table_name),
+            'NON_FUNG_TABLE': str(self.table_name),
             'NON_FUNG_LIMIT': str(self.limit)
         }
 

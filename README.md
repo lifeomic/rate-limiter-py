@@ -56,7 +56,7 @@ passed directly to the limiter or set via environment variables.
 
 | Name       | Environment Variable | Description                                                                                      |
 |------------|----------------------|--------------------------------------------------------------------------------------------------|
-| table_name | FUNG_TABLE_NAME      | Name of the DynamoDB table.                                                                      |
+| table_name | FUNG_TABLE      | Name of the DynamoDB table.                                                                      |
 | limit      | FUNG_LIMIT           | The maximum number of tokens that may be available.                                              |
 | window     | FUNG_WINDOW          | Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available. |
 
@@ -179,7 +179,7 @@ passed directly to the limiter or set via environment variables.
 
 | Name       | Environment Variable | Description                                                   |
 |------------|----------------------|---------------------------------------------------------------|
-| table_name | NON_FUNG_TABLE_NAME  | Name of the DynamoDB table                                    |
+| table_name | NON_FUNG_TABLE  | Name of the DynamoDB table                                    |
 | limit      | NON_FUNG_LIMIT       | The maximum number of tokens/reservations that may be present |
 
 Each implementation example assumes the table name and limit have been set via environment variables.
