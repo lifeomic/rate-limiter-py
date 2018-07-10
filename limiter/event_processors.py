@@ -148,7 +148,7 @@ class EventProcessorManager(object):
         >>> event = {'source': 'aws.emr', 'detail': {'clusterId': 'j-1YONHTCP3YZKC', 'state': 'COMPLETED'}}
         >>> predicate = ProcessorPredicate('detail.state', lambda state: state == 'COMPLETED')
         >>> processor = EventProcessor('aws.emr', 'detail.clusterId', predicate=predicate)
-        >>> manager = manager = EventProcessorManager(table_name='table', index_name='idx', processors=[processor])
+        >>> manager = EventProcessorManager(table_name='table', index_name='idx', processors=[processor])
         >>> manager.process_event(event)
     """
     def __init__(self, table_name=None, index_name=None, processors=None):
