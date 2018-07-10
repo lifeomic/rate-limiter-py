@@ -56,7 +56,7 @@ passed directly to the limiter or set via environment variables.
 
 | Name       | Environment Variable | Description                                                                                      |
 |------------|----------------------|--------------------------------------------------------------------------------------------------|
-| table_name | FUNG_TABLE      | Name of the DynamoDB table.                                                                      |
+| table_name | FUNG_TABLE           | Name of the DynamoDB table.                                                                      |
 | limit      | FUNG_LIMIT           | The maximum number of tokens that may be available.                                              |
 | window     | FUNG_WINDOW          | Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available. |
 
@@ -172,6 +172,15 @@ The key data type and description can be found in the above, attributes table.
 | resourceCoordinate | HASH     |
 | resourceId         | RANGE    |
 
+#### Global Secondary Index
+
+A global secondary index is used to locate tokens using only `resourceId`. This will be needed to locate tokens
+based on the resource id provided in CloudWatch events.
+
+| Attribute Name | Key Type |
+|----------------|----------|
+| resourceId     | HASH     |
+
 ### Creating Tokens
 
 Each of the non-fungible token limiter implementations require the following information. These values can be
@@ -179,7 +188,7 @@ passed directly to the limiter or set via environment variables.
 
 | Name       | Environment Variable | Description                                                   |
 |------------|----------------------|---------------------------------------------------------------|
-| table_name | NON_FUNG_TABLE  | Name of the DynamoDB table                                    |
+| table_name | NON_FUNG_TABLE       | Name of the DynamoDB table                                    |
 | limit      | NON_FUNG_LIMIT       | The maximum number of tokens/reservations that may be present |
 
 Each implementation example assumes the table name and limit have been set via environment variables.
@@ -226,9 +235,33 @@ def invoke_my_resource(account_id):
 
 ### Removing Tokens
 
-The recommended architecture for detecting the termination of and removing tokenized
-resources is via a Lambda consuming CloudWatch events. Details and examples coming
-in the next set of changes.
+The recommended approach for detecting the termination of and removing tokenized
+resources is via a Lambda triggered by CloudWatch. The CloudWatch rules should be as precise as
+practical to avoid unnecessarily executing the lambda.
+
+The `event_processors` module contains all the logic necessary to consume, test and remove tokens from
+CloudWatch events.
+
+#### Usage
+
+The `EventProcessorManager` class removes non-fungible tokens from DynamoDB represented by CloudWatch events.
+The manager is composed of multiple `EventProcessors`, one for specific event "source", e.g. 'aws.emr'.
+The processors are responsible for determining if an event references a tokenized resource and if so, extracting its
+resource id. Each processor is composed of zero to many predicates, which determine if an event references a tokenized
+resource. If a processor is not configured with any predicates it will just extract the resource id.
+
+##### Example
+
+```python
+from limiter.event_processors import EventProcessorManager, EventProcessor, ProcessorPredicate
+
+predicate = ProcessorPredicate('detail.name', lambda name: 'debugging' not in name)
+processor = EventProcessor('aws.emr', 'detail.clusterId', predicate=predicate)
+manager = EventProcessorManager(table_name='table', index_name='idx', processors=[processor])
+
+def handler(event, context):
+  manager.process_event(event)
+```
 
 ## Development
 
