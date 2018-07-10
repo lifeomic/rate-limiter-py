@@ -1,9 +1,8 @@
 #!/bin/bash/env python
 from unittest import TestCase
-from test.utils import random_string, now_utc_ms, now_utc_sec
+from test.utils import random_string, now_utc_ms, now_utc_sec, create_non_fung_table
 from moto import mock_dynamodb2
 from mock import Mock, MagicMock, patch
-import boto3
 from boto3.dynamodb.conditions import Key
 from limiter.event_processors import ProcessorPredicate, EventProcessor, EventProcessorManager
 
@@ -226,7 +225,7 @@ class EventProcessorManagerTest(TestCase):
         mock_processor.source = event_source
         mock_processor.test_and_get_id = MagicMock(return_value=self.resource_id)
 
-        mock_table = _creat_mock_table(self.table_name, self.index_name)
+        mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
         self.assertEquals(1, self._get_resource_id_count(mock_table))
 
@@ -247,7 +246,7 @@ class EventProcessorManagerTest(TestCase):
         mock_processor.source = event_source
         mock_processor.test_and_get_id = MagicMock(return_value=random_string())
 
-        mock_table = _creat_mock_table(self.table_name, self.index_name)
+        mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
         self.assertEquals(1, self._get_resource_id_count(mock_table))
 
@@ -268,7 +267,7 @@ class EventProcessorManagerTest(TestCase):
         mock_processor.source = event_source
         mock_processor.test_and_get_id = MagicMock(return_value=None)
 
-        mock_table = _creat_mock_table(self.table_name, self.index_name)
+        mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
         self.assertEquals(1, self._get_resource_id_count(mock_table))
 
@@ -294,71 +293,3 @@ class EventProcessorManagerTest(TestCase):
             'expirationTime': now_utc_sec() + 300
         }
         mock_table.put_item(Item=token_item)
-
-def _creat_mock_table(table_name, index_name):
-    mock_client = boto3.client('dynamodb', region_name='us-east-1')
-    key_schema = [
-        {
-            'AttributeName': 'resourceCoordinate',
-            'KeyType': 'HASH'
-        },
-        {
-            'AttributeName': 'resourceId',
-            'KeyType': 'RANGE'
-        }
-    ]
-
-    attribute_definitions = [
-        {
-            'AttributeName': 'resourceCoordinate',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'expirationTime',
-            'AttributeType': 'N'
-        },
-        {
-            'AttributeName': 'resourceName',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'accountId',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'resourceId',
-            'AttributeType': 'S'
-        }
-    ]
-
-    global_sec_indexes = [
-        {
-            'IndexName': index_name,
-            'KeySchema': [
-                {
-                    'AttributeName': 'resourceId',
-                    'KeyType': 'HASH'
-                }
-            ],
-            'Projection': {
-                'ProjectionType': 'ALL'
-            },
-            'ProvisionedThroughput': {
-                'ReadCapacityUnits': 123,
-                'WriteCapacityUnits': 123
-            }
-        }
-    ]
-
-    provisioned_throughput = {
-        'ReadCapacityUnits': 123,
-        'WriteCapacityUnits': 123
-    }
-
-    mock_client.create_table(TableName=table_name,
-                             KeySchema=key_schema,
-                             AttributeDefinitions=attribute_definitions,
-                             GlobalSecondaryIndexes=global_sec_indexes,
-                             ProvisionedThroughput=provisioned_throughput)
-
-    return boto3.resource('dynamodb', 'us-east-1').Table(table_name)
