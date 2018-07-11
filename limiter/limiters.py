@@ -43,7 +43,7 @@ class BaseFungibleTokenLimiter(BaseTokenLimiter):
     Args:
         resource_name (str): Name of the resource being rate-limited.
         table_name (str): Name of the DynamoDB table.
-                          Can be set via environment variable `FUNG_TABLE_NAME`. Defaults to None.
+                          Can be set via environment variable `FUNG_TABLE`. Defaults to None.
         limit (int): The maximum number of tokens that may be available.
                      Can be set via environment variable `FUNG_LIMIT`. Defaults to None.
         window (int): Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available.
@@ -52,7 +52,7 @@ class BaseFungibleTokenLimiter(BaseTokenLimiter):
     def __init__(self, resource_name, table_name=None, limit=None, window=None):
         super(BaseFungibleTokenLimiter, self).__init__(resource_name)
 
-        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'FUNG_TABLE_NAME')
+        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'FUNG_TABLE')
         self.limit = int(self._validate_required_env_fallback(limit, 'limit', 'FUNG_LIMIT'))
         self.window = int(self._validate_required_env_fallback(window, 'window', 'FUNG_WINDOW'))
 
@@ -71,7 +71,7 @@ class FungibleTokenContextManager(BaseFungibleTokenLimiter):
         resource_name (str): Name of the resource being rate-limited.
         account_id (str): The account to retrieve a token on behalf of.
         table_name (str): Name of the DynamoDB table.
-                          Can be set via environment variable `FUNG_TABLE_NAME`. Defaults to None.
+                          Can be set via environment variable `FUNG_TABLE`. Defaults to None.
         limit (int): The maximum number of tokens that may be available.
                      Can be set via environment variable `FUNG_LIMIT`. Defaults to None.
         window (int): Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available.
@@ -121,7 +121,7 @@ class FungibleTokenLimiterDecorator(BaseFungibleTokenLimiter):
     Args:
         resource_name (str): Name of the resource being rate-limited.
         table_name (str): Name of the DynamoDB table.
-                          Can be set via environment variable `FUNG_TABLE_NAME`. Defaults to None.
+                          Can be set via environment variable `FUNG_TABLE`. Defaults to None.
         limit (int): The maximum number of tokens that may be available.
                      Can be set via environment variable `FUNG_LIMIT`. Defaults to None.
         window (int): Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available.
@@ -189,7 +189,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
         resource_name (str): Name of the resource being rate-limited.
         account_id (str): The account to create a reservation on behalf of.
         table_name (str): Name of the DynamoDB table.
-                          Can be set via environment variable `NON_FUNG_TABLE_NAME`. Defaults to None.
+                          Can be set via environment variable `NON_FUNG_TABLE`. Defaults to None.
         limit (int): The maximum number of tokens/reservations that may be present.
                      Can be set via environment variable `NON_FUNG_LIMIT`. Defaults to None.
 
@@ -214,7 +214,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
         super(NonFungibleTokenLimiterContextManager, self).__init__(resource_name)
 
         self.account_id = account_id
-        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'NON_FUNG_TABLE_NAME')
+        self.table_name = self._validate_required_env_fallback(table_name, 'table_name', 'NON_FUNG_TABLE')
         self.limit = int(self._validate_required_env_fallback(limit, 'limit', 'NON_FUNG_LIMIT'))
 
         self.reservation = None

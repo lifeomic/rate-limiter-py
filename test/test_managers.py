@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 import uuid
 from unittest import TestCase
-from test.utils import random_string, now_utc_sec, now_utc_ms
+from test.utils import random_string, now_utc_sec, now_utc_ms, create_non_fung_table
 from moto import mock_dynamodb2
 from mock import Mock, MagicMock
 from botocore.exceptions import ClientError
-import boto3
 from boto3.dynamodb.conditions import Key
 from limiter.managers import FungibleTokenManager, NonFungibleTokenManager, TokenReservation
 from limiter.exceptions import CapacityExhaustedException
@@ -139,7 +138,7 @@ class NonFungibleTokenManagerTest(TestCase):
         now = now_utc_sec()
         account_id = random_string()
         coordinate = '{}:{}'.format(self.resource_name, account_id)
-        mock_table = _creat_mock_table(self.table)
+        mock_table = create_non_fung_table(self.table)
 
         self.manager._table = mock_table
         self.manager.get_reservation(account_id)
@@ -159,7 +158,7 @@ class NonFungibleTokenManagerTest(TestCase):
         account_id = random_string()
         coordinate = '{}:{}'.format(self.resource_name, account_id)
 
-        mock_table = _creat_mock_table(self.table)
+        mock_table = create_non_fung_table(self.table)
         self.manager._table = mock_table
 
         # Insert enough tokens to reach the limit
@@ -180,7 +179,7 @@ class NonFungibleTokenManagerTest(TestCase):
         now = now_utc_sec()
         account_id = random_string()
         coordinate = '{}:{}'.format(self.resource_name, account_id)
-        mock_table = _creat_mock_table(self.table)
+        mock_table = create_non_fung_table(self.table)
         expected_count = 1
 
         # Insert 2 expired and 1 valid
@@ -221,7 +220,7 @@ class NonFungibleTokenManagerTest(TestCase):
     def test_get_token_count_no_tokens(self):
         now = now_utc_sec()
         account_id = random_string()
-        mock_table = _creat_mock_table(self.table)
+        mock_table = create_non_fung_table(self.table)
         expected_count = 0
 
         self.manager._table = mock_table
@@ -239,7 +238,7 @@ class TokenReservationTest(TestCase):
 
     @mock_dynamodb2
     def test_delete_reservation(self):
-        mock_table = _creat_mock_table(self.table_name)
+        mock_table = create_non_fung_table(self.table_name)
 
         reservation = TokenReservation(self.res_id, mock_table, self.resource_name, self.account_id, self.coordinate)
         _insert_reservation(mock_table, reservation)
@@ -279,51 +278,3 @@ def _insert_reservation(mock_table, reservation):
         'expirationTime': now_utc_sec() + 300
     }
     mock_table.put_item(Item=reservation_item)
-
-def _creat_mock_table(table_name):
-    mock_client = boto3.client('dynamodb', region_name='us-east-1')
-    key_schema = [
-        {
-            'AttributeName': 'resourceCoordinate',
-            'KeyType': 'HASH'
-        },
-        {
-            'AttributeName': 'resourceId',
-            'KeyType': 'RANGE'
-        }
-    ]
-
-    attribute_definitions = [
-        {
-            'AttributeName': 'resourceCoordinate',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'expirationTime',
-            'AttributeType': 'N'
-        },
-        {
-            'AttributeName': 'resourceName',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'accountId',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'resourceId',
-            'AttributeType': 'S'
-        }
-    ]
-
-    provisioned_throughput = {
-        'ReadCapacityUnits': 123,
-        'WriteCapacityUnits': 123
-    }
-
-    mock_client.create_table(TableName=table_name,
-                             KeySchema=key_schema,
-                             AttributeDefinitions=attribute_definitions,
-                             ProvisionedThroughput=provisioned_throughput)
-
-    return boto3.resource('dynamodb', 'us-east-1').Table(table_name)
