@@ -23,7 +23,7 @@ class ProcessorPredicate(object):
         or_preds (list:ProcessorPredicate): List of disjunctive ProcessorPredicates. Defaults to an empty list.
 
     Note:
-        If an instance is composed of both conjuctive and disjunctive predicates, only the conjuctive
+        If an instance is composed of both conjunctive and disjunctive predicates, only the conjunctive
         list will be evaluated.
 
     Examples:
@@ -40,7 +40,7 @@ class ProcessorPredicate(object):
 
     def with_and(self, add_pred):
         """
-        Add a predicate to the conjuctive list.
+        Add a predicate to the conjunctive list.
 
         Args:
             add_pred (ProcessorPredicate): The predicate to add.
@@ -94,7 +94,7 @@ class EventProcessor(object):
     Validates and extracts the resource id from events.
 
     Instances of this class will extract the value at the given id path, if the its predicate evaluates to True
-    form the event. If an instance does not have a predicate the id will be returned without testing. If either the
+    from the event. If an instance does not have a predicate the id will be returned without testing. If either the
     predicate fails or the id path is invalid None will be returned.
 
     Args:
