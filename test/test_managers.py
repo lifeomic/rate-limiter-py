@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 import uuid
+import random
 from unittest import TestCase
 from test.utils import random_string, now_utc_sec, now_utc_ms, create_non_fung_table, create_limit_table
 from moto import mock_dynamodb2
 from mock import Mock, MagicMock
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
-from limiter.managers import FungibleTokenManager, NonFungibleTokenManager, TokenReservation, _compute_refill_amount
+from limiter.managers import FungibleTokenManager, NonFungibleTokenManager, TokenReservation, _compute_refill_amount,\
+                             DEFAULT_LIMIT, DEFAULT_WINDOW_SEC
 from limiter.exceptions import CapacityExhaustedException
 
 class FungibleTokenManagerTest(TestCase):
@@ -131,6 +133,44 @@ class FungibleTokenManagerTest(TestCase):
         ]
 
         self.assertEquals(expected_args, actual_args[0])
+
+    @mock_dynamodb2
+    def test_account_resource_limit(self):
+        limit = random.randint(0, 100)
+        window = random.randint(0, 100)
+        account_id = random_string()
+
+        mock_limit_table = create_limit_table(self.limit_table)
+        _insert_limit(mock_limit_table, self.resource_name, account_id, limit, window)
+
+        self.manager._limit_table = mock_limit_table
+        result = self.manager._get_account_resource_limit(account_id)
+
+        self.assertEquals(limit, result['limit'])
+        self.assertEquals(window, result['windowSec'])
+
+    @mock_dynamodb2
+    def test_account_resource_limit_defaults(self):
+        account_id = random_string()
+
+        mock_limit_table = create_limit_table(self.limit_table)
+        self.manager._limit_table = mock_limit_table
+
+        result = self.manager._get_account_resource_limit(account_id)
+        self.assertEquals(DEFAULT_LIMIT, result['limit'])
+        self.assertEquals(DEFAULT_WINDOW_SEC, result['windowSec'])
+
+    @mock_dynamodb2
+    def test_account_resource_limit_blacklist(self):
+        limit = 0
+        window = random.randint(0, 100)
+        account_id = random_string()
+
+        mock_limit_table = create_limit_table(self.limit_table)
+        _insert_limit(mock_limit_table, self.resource_name, account_id, limit, window)
+        self.manager._limit_table = mock_limit_table
+
+        self.assertRaises(CapacityExhaustedException, self.manager._get_account_resource_limit, account_id)
 
 class NonFungibleTokenManagerTest(TestCase):
     def setUp(self):
