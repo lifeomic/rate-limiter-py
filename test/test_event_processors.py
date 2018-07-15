@@ -208,7 +208,7 @@ class EventProcessorManagerTest(TestCase):
 
     def test_env_params(self):
         env_vars = {
-            'NON_FUNG_TABLE': self.table_name,
+            'NON_FUNGIBLE_TABLE': self.table_name,
             'NON_FUNG_RES_INDEX': self.index_name
         }
 

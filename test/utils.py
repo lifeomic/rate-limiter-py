@@ -13,6 +13,52 @@ def now_utc_sec():
 def now_utc_ms():
     return round(float(datetime.utcnow().strftime('%s.%f')) * 1000)
 
+def create_limit_table(table_name):
+    """ Tests which call this are expected to be in mock_dynamodb2 context """
+
+    mock_client = boto3.client('dynamodb', region_name='us-east-1')
+    key_schema = [
+        {
+            'AttributeName': 'resourceName',
+            'KeyType': 'HASH'
+        },
+        {
+            'AttributeName': 'accountId',
+            'KeyType': 'RANGE'
+        }
+    ]
+
+    attribute_definitions = [
+        {
+            'AttributeName': 'resourceName',
+            'AttributeType': 'HASH'
+        },
+        {
+            'AttributeName': 'accountId',
+            'AttributeType': 'RANGE'
+        },
+        {
+            'AttributeName': 'limit',
+            'AttributeType': 'N'
+        },
+        {
+            'AttributeName': 'windowSec',
+            'AttributeType': 'N'
+        }
+    ]
+
+    provisioned_throughput = {
+        'ReadCapacityUnits': 123,
+        'WriteCapacityUnits': 123
+    }
+
+    mock_client.create_table(TableName=table_name,
+                             KeySchema=key_schema,
+                             AttributeDefinitions=attribute_definitions,
+                             ProvisionedThroughput=provisioned_throughput)
+
+    return boto3.resource('dynamodb', 'us-east-1').Table(table_name)
+
 def create_non_fung_table(table_name, index_name='idx'):
     """ Tests which call this are expected to be in mock_dynamodb2 context """
 

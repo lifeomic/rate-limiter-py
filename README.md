@@ -22,12 +22,18 @@ Limiting is enforced by disallowing token creation beyond the specified capacity
 
 Fungible token rate-limiting requirements and usage is detailed below.
 
-### DynamoDB Table
+### DynamoDB Tables
+
+The expected usage is each rate limiter will use the same multi-tenant token and limit tables, created and
+managed by a separate service. However, a private token and/or limit table can be used when instantiating the
+middleware.
+
+#### Token Table
 
 The tokens for a single resource are stored in a single DynamoDB row, representing the "bucket".
 The expected table schema is detailed below.
 
-#### Attributes
+##### Attributes
 
 These are all the expected table attributes, including the keys.
 
@@ -40,7 +46,32 @@ These are all the expected table attributes, including the keys.
 | lastToken      | Number    | Timestamp, in milliseconds, when the last token was taken    |
 
 
-#### Keys
+##### Keys
+
+The key data type and description can be found in the above, attributes table.
+
+| Attribute Name | Key Type |
+|----------------|----------|
+| resourceName   | HASH     |
+| accountId      | RANGE    |
+
+#### Limit Table
+
+The limit and window for a specific account on a specific resource are stored in a single DynamoDB row.
+The expected table schema is detailed below.
+
+##### Attributes
+
+These are all the expected table attributes, including the keys.
+
+| Attribute Name | Data Type | Description                                                                                    |
+|----------------|-----------|------------------------------------------------------------------------------------------------|
+| resourceName   | String    | User-defined name of the rate limited resource                                                 |
+| accountId      | String    | Id of the entity which created the resource                                                    |
+| limit          | Number    | The maximum number of tokens the account may acquire on the resource                           |
+| windowSec      | Number    | Sliding window of time, in seconds, wherein only the limit number of tokens will be available. |
+
+##### Keys
 
 The key data type and description can be found in the above, attributes table.
 
@@ -54,11 +85,10 @@ The key data type and description can be found in the above, attributes table.
 Each of the fungible token limiter implementations require the following information. These values can be
 passed directly to the limiter or set via environment variables.
 
-| Name       | Environment Variable | Description                                                                                      |
-|------------|----------------------|--------------------------------------------------------------------------------------------------|
-| table_name | FUNG_TABLE           | Name of the DynamoDB table.                                                                      |
-| limit      | FUNG_LIMIT           | The maximum number of tokens that may be available.                                              |
-| window     | FUNG_WINDOW          | Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available. |
+| Name        | Environment Variable | Description                                                                                      |
+|-------------|----------------------|--------------------------------------------------------------------------------------------------|
+| token_table | FUNGIBLE_TABLE       | Name of the DynamoDB table containing tokens.                                                    |
+| limit_table | LIMIT_TABLE          | Name of the DynamoDB table containing account limit                                              |
 
 The only other value required by each implementation is `account id`. Each implementation handles specifying this value
 differently.
@@ -188,7 +218,7 @@ passed directly to the limiter or set via environment variables.
 
 | Name       | Environment Variable | Description                                                   |
 |------------|----------------------|---------------------------------------------------------------|
-| table_name | NON_FUNG_TABLE       | Name of the DynamoDB table                                    |
+| table_name | NON_FUNGIBLE_TABLE       | Name of the DynamoDB table                                    |
 | limit      | NON_FUNG_LIMIT       | The maximum number of tokens/reservations that may be present |
 
 Each implementation example assumes the table name and limit have been set via environment variables.

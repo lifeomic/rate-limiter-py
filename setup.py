@@ -11,6 +11,7 @@ setup(name='rate-limiter-py',
     license='Proprietary',
     install_requires=[
         'boto3==1.6.4',
-        'botocore==1.9.4'
+        'botocore==1.9.4',
+        'future==0.16.0'
     ]
 )
