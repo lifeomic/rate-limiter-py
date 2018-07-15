@@ -82,13 +82,13 @@ The key data type and description can be found in the above, attributes table.
 
 ### Usage
 
-Each of the fungible token limiter implementations require the following information. These values can be
+Each of the fungible token limiter implementations require the names of the token and limit tables. These values can be
 passed directly to the limiter or set via environment variables.
 
-| Name        | Environment Variable | Description                                                                                      |
-|-------------|----------------------|--------------------------------------------------------------------------------------------------|
-| token_table | FUNGIBLE_TABLE       | Name of the DynamoDB table containing tokens.                                                    |
-| limit_table | LIMIT_TABLE          | Name of the DynamoDB table containing account limit                                              |
+| Name        | Environment Variable | Description                                         |
+|-------------|----------------------|-----------------------------------------------------|
+| token_table | FUNGIBLE_TABLE       | Name of the DynamoDB table containing tokens.       |
+| limit_table | LIMIT_TABLE          | Name of the DynamoDB table containing account limit |
 
 The only other value required by each implementation is `account id`. Each implementation handles specifying this value
 differently.
@@ -213,13 +213,16 @@ based on the resource id provided in CloudWatch events.
 
 ### Creating Tokens
 
-Each of the non-fungible token limiter implementations require the following information. These values can be
+Each of the fungible token limiter implementations require the names of the token and limit tables. These values can be
 passed directly to the limiter or set via environment variables.
 
-| Name       | Environment Variable | Description                                                   |
-|------------|----------------------|---------------------------------------------------------------|
-| table_name | NON_FUNGIBLE_TABLE       | Name of the DynamoDB table                                    |
-| limit      | NON_FUNG_LIMIT       | The maximum number of tokens/reservations that may be present |
+| Name        | Environment Variable | Description                                         |
+|-------------|----------------------|-----------------------------------------------------|
+| token_table | FUNGIBLE_TABLE       | Name of the DynamoDB table containing tokens.       |
+| limit_table | LIMIT_TABLE          | Name of the DynamoDB table containing account limit |
+
+The only other value required by each implementation is `account id`. Each implementation handles specifying this value
+differently.
 
 Each implementation example assumes the table name and limit have been set via environment variables.
 
