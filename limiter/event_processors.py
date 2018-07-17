@@ -1,8 +1,8 @@
 #!/bin/bash/env python
-import os
 import sys
 import logging
 from boto3.dynamodb.conditions import Key
+from limiter.utils import validate_table_env_fallback
 from limiter.clients import dynamodb
 from limiter.managers import RESOURCE_COORDINATE, RESOURCE_ID
 
@@ -139,9 +139,11 @@ class EventProcessorManager(object):
 
     Args:
         table_name (str): Name of the DynamoDB non-fungible token table.
-                          Can be set via environment variable `NON_FUNG_TABLE`. Defaults to None.
+                          Can be set via environment variable `NON_FUNGIBLE_TABLE`
+                          or synthesized using the `LIMITER_TABLES_BASE_NAME` environment variable.
         index_name (str): Name of the index to query for the resource coordinate using the resource id.
-                          Can be set via environment variable `NON_FUNG_RES_INDEX`. Defaults to None.
+                          Can be set via environment variable `NON_FUNG_RES_INDEX`
+                          or synthesized using the `LIMITER_TABLES_BASE_NAME` environment variable.
         processors (list:EventProcessor): List of event processors. Defaults to None.
 
     Examples:
@@ -153,8 +155,8 @@ class EventProcessorManager(object):
     """
     def __init__(self, table_name=None, index_name=None, processors=None):
         self.processors = {x.source: x for x in processors} if processors else {}
-        self.table_name = _validate_required_env_fallback(table_name, 'table_name', 'NON_FUNG_TABLE')
-        self.index_name = _validate_required_env_fallback(index_name, 'index_name', 'NON_FUNG_RES_INDEX')
+        self.table_name = validate_table_env_fallback(table_name, 'NON_FUNGIBLE_TABLE', 'non-fungible-tokens')
+        self.index_name = validate_table_env_fallback(index_name, 'NON_FUNG_RES_INDEX', 'resource-index')
 
         self._client = None
         self._table = None
@@ -254,29 +256,6 @@ class EventProcessorManager(object):
             IndexName=self.index_name,
             KeyConditionExpression=Key(RESOURCE_ID).eq(resource_id))
         return None if response['Count'] == 0 else response['Items'][0][RESOURCE_COORDINATE]
-
-def _validate_required_env_fallback(param_value, param_name, env_var):
-    """
-    Verify a required argument has a non-null value or has been set via an environment variable.
-
-    Args:
-      param_value (obj): Check if this value is non-null.
-      param_name (str): Name of the value being checked.
-      env_var (str): Name of the environment variable to fallback on.
-
-    Returns:
-        obj: `param_value` if it is non-null or the environment variable value.
-
-    Raises:
-        ValueError: If `param_value` is null and the environment variable has not been set.
-    """
-    if param_value:
-        return param_value
-    if env_var in os.environ:
-        return os.environ[env_var]
-
-    msg_format = '{} must be passed to the constructor or set environment variable: {}'
-    raise ValueError(msg_format.format(param_name, env_var))
 
 def _reduce_to_path(obj, path):
     """

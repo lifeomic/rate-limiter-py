@@ -4,8 +4,10 @@ import uuid
 from datetime import datetime
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
+from future.utils import raise_from
 from limiter.clients import dynamodb
-from limiter.exceptions import CapacityExhaustedException, ReservationNotFoundException
+from limiter.exceptions import CapacityExhaustedException, ReservationNotFoundException, ThrottlingException,\
+                               RateLimiterException
 
 logger = logging.getLogger()
 
@@ -19,22 +21,27 @@ RESOURCE_COORDINATE = 'resourceCoordinate'
 RESOURCE_ID = 'resourceId'
 EXPIRATION_TIME = 'expirationTime'
 
+# Defaults when no account-specific limit is found
+DEFAULT_LIMIT = 1000
+DEFAULT_WINDOW_SEC = 1
+
 class BaseTokenManager(object):
     """
     Base class for both fungible and non-fungible token managers.
 
     Args:
-        table_name (str): Name of the DynamoDB table.
+        token_table (str): Name of the DynamoDB table containing tokens.
+        limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
-        limit (int): The maximum number of tokens that may be available.
     """
-    def __init__(self, table_name, resource_name, limit):
-        self.table_name = table_name
+    def __init__(self, token_table, limit_table, resource_name):
+        self.token_table_name = token_table
+        self.limit_table_name = limit_table
         self.resource_name = resource_name
-        self.limit = limit
 
         self._client = None
-        self._table = None
+        self._token_table = None
+        self._limit_table = None
 
     @property
     def client(self):
@@ -44,11 +51,59 @@ class BaseTokenManager(object):
         return self._client
 
     @property
-    def table(self):
+    def token_table(self):
         """ DynamoDB Table containing token row """
-        if not self._table:
-            self._table = self.client.Table(self.table_name)
-        return self._table
+        if not self._token_table:
+            self._table = self.client.Table(self.token_table_name)
+        return self._token_table
+
+    @property
+    def limit_table(self):
+        """ DynamoDB Table containing resource limits """
+        if not self._limit_table:
+            self._limit_table = self.client.Table(self.limit_table_name)
+        return self._limit_table
+
+    def _get_account_resource_limit(self, account_id):
+        """
+        Retrieve the limit and window for an account on this resource.
+
+        If no limits for the given account and this resource is found in DynamoDB a default
+        limit and window of 1000 and 1 respectively will be returned.
+        An account can be blacklisted by setting its limit to 0. If a limit of 0
+        is found a CapacityExhaustedException will be thrown.
+
+        Args:
+            account_id (str): The account to get the limits of.
+
+        Returns:
+            (dict): Contains the limit and window at the `limit` and `windowSec` keys respectively.
+
+        Throws:
+            ThrottlingException: If AWS throttled the query to get resource limit.
+            CapacityExhaustedException: If the account has no capacity for the resource, i.e. blacklisted.
+            RateLimiterException: On any unrecoverable exception thrown when querying for the resource limit.
+        """
+        result = {'limit': DEFAULT_LIMIT, 'windowSec': DEFAULT_WINDOW_SEC}
+        try:
+            response = self.limit_table.query(
+                KeyConditionExpression=Key(RESOURCE_NAME).eq(self.resource_name) & Key(ACCOUNT_ID).eq(account_id)
+            )
+            if response['Count']:
+                result = response['Items'][0]
+        except Exception as e:
+            if isinstance(e, ClientError):
+                error_code = e.response['Error']['Code']
+                if error_code == 'ProvisionedThroughputExceededException' or error_code == 'TooManyRequestsException':
+                    message = 'Throttled getting limit on {} for account {}'.format(self.resource_name, account_id)
+                    raise_from(ThrottlingException(message), e)
+            message = 'Failed to get limit on {} for account {}'.format(self.resource_name, account_id)
+            raise_from(RateLimiterException(message), e)
+
+        if result['limit'] <= 0:
+            message = 'Account {} has not been allocated any capacity for {}'.format(account_id, self.resource_name)
+            raise CapacityExhaustedException(message)
+        return result
 
 class FungibleTokenManager(BaseTokenManager):
     """
@@ -76,17 +131,10 @@ class FungibleTokenManager(BaseTokenManager):
         most limits are expressed in seconds.
 
     Args:
-        table_name (str): Name of the DynamoDB table.
+        token_table (str): Name of the DynamoDB table containing tokens.
+        limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
-        limit (int): The maximum number of tokens that may be available.
-        window (int): Sliding window of time, in seconds, wherein only the `limit` number of tokens will be available.
     """
-
-    def __init__(self, table_name, resource_name, limit, window):
-        super(FungibleTokenManager, self).__init__(table_name, resource_name, limit)
-        self.window = window * 1000
-        self.tokens_ms = float(limit) / self.window # Number of tokens the bucket will accumulate per millisecond
-        self.ms_token = max(1, float(self.window) / limit) # Number of milliseconds to accumulate a new token
 
     def get_token(self, account_id):
         """
@@ -105,32 +153,44 @@ class FungibleTokenManager(BaseTokenManager):
         """
 
         exec_time = now_utc_ms()
-        bucket = self._get_bucket_token(account_id, exec_time)
 
+        limit_response = self._get_account_resource_limit(account_id)
+        limit = int(limit_response['limit'])
+        window_ms = int(limit_response['windowSec']) * 1000
+
+        token_ms = float(limit) / window_ms # Number of tokens the bucket will accumulate per millisecond
+        ms_token = max(1, float(window_ms) / limit) # Number of milliseconds to accumulate a new token
+
+        bucket = self._get_bucket_token(account_id, exec_time, ms_token)
         current_tokens = bucket[TOKENS]
+
         last_refill = int(bucket.get('last_refill', 0)) # If the row has not been created yet, use 0
-        refill_tokens = self._compute_refill_amount(current_tokens, last_refill, exec_time)
+        time_since_refill = exec_time - last_refill
+        refill_tokens = _compute_refill_amount(current_tokens, time_since_refill, limit, token_ms)
 
         self._refill_bucket_tokens(account_id, refill_tokens, exec_time)
 
-    def _get_bucket_token(self, account_id, exec_time):
+    def _get_bucket_token(self, account_id, exec_time, ms_token):
         """
         Conditionally retrieve a token from and return the current state of the bucket (table row).
 
         Args:
           account_id (str): The account to retrieve a token on behalf of.
           exec_time (int): Time, in milliseconds, when the token retrieval started.
+          ms_token (int): The number of milliseconds needed to accumulate a single token.
 
         Returns:
             dict: State of the bucket after removing a token.
 
         Raises:
             CapacityExhaustedException: If no more tokens can be taken.
+            ThrottlingException: If AWS throttled the query to get resource limit.
+            RateLimiterException: On any unrecoverable exception thrown when querying for the resource limit.
         """
         try:
             update_exp = 'add {} :dec, set {} :exec_time'.format(TOKENS, LAST_TOKEN)
             condition_exp = '{0} > :min OR {1} < :failsafe OR attribute_not_exists({0})'.format(TOKENS, LAST_TOKEN)
-            return self.table.update_item(
+            return self.token_table.update_item(
                 Key={
                     RESOURCE_NAME: self.resource_name,
                     ACCOUNT_ID: account_id
@@ -140,33 +200,22 @@ class FungibleTokenManager(BaseTokenManager):
                 ExpressionAttributeValues={
                     ':dec': -1,
                     ':min': 0,
-                    ':failsafe': exec_time - self.ms_token,
+                    ':failsafe': exec_time - ms_token,
                     ':exec_time': exec_time
                 },
                 ReturnValues='ALL_NEW'
             )['Attributes']
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
-                raise CapacityExhaustedException(message)
-            raise
-
-    def _compute_refill_amount(self, current_tokens, last_refill, exec_time):
-        """
-        Compute the number of tokens accumulated since the last refill.
-
-        Args:
-          current_tokens (int): The number of tokens currently in the bucket.
-          last_refill (int): Timestamp, in milliseconds, since the last time the bucket was refilled.
-          exec_time: Time, in milliseconds, when the token retrieval started.
-
-        Returns:
-            int: The number of tokens accumulated since the last refill.
-        """
-        tokens = max(0, current_tokens) # Tokens can be negative on bucket creation or a prolonged failure to refill
-        time_since_refill = exec_time - last_refill
-
-        return min(self.limit - 1, tokens + int(self.tokens_ms * time_since_refill))
+        except Exception as e:
+            if isinstance(e, ClientError):
+                error_code = e.response['Error']['Code']
+                if error_code == 'ConditionalCheckFailedException':
+                    message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
+                    raise CapacityExhaustedException(message)
+                elif error_code == 'ProvisionedThroughputExceededException' or error_code == 'TooManyRequestsException':
+                    message = 'Throttled by getting limit on {} for account {}'.format(self.resource_name, account_id)
+                    raise_from(ThrottlingException(message), e)
+            message = 'Failed to get limit on {} for account {}'.format(self.resource_name, account_id)
+            raise_from(RateLimiterException(message), e)
 
     def _refill_bucket_tokens(self, account_id, tokens, refill_time):
         """
@@ -176,14 +225,11 @@ class FungibleTokenManager(BaseTokenManager):
           account_id (str): Account which owns the bucket to be refilled.
           tokens (int): The new token balance.
           refill_time (int): Time, in milliseconds, when the token retrieval started.
-
-        Returns:
-            dict: State of the bucket after refilling the tokens, if the refill succeeded, None otherwise.
         """
         try:
             update_exp = 'set {} = :tokens, {} = :refill_time'.format(TOKENS, LAST_REFILL)
             condition_exp = '{} < :refill_time'.format(LAST_REFILL)
-            self.table.update_item(
+            self.token_table.update_item(
                 Key={
                     RESOURCE_NAME: self.resource_name,
                     ACCOUNT_ID: account_id
@@ -196,12 +242,12 @@ class FungibleTokenManager(BaseTokenManager):
                 },
                 ReturnValues='NONE'
             )
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                logger.warn('Failed to refill tokens for %s:%s, someone else already refilled with more current state',
-                            self.resource_name, account_id)
-            else:
-                raise
+        except Exception as e:
+            if isinstance(e, ClientError):
+                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                    logger.warn('Failed to refill tokens for %s:%s, already refilled with more current state',
+                                self.resource_name, account_id)
+            logger.exception('Failed to refill tokens for %s:%s', self.resource_name, account_id)
 
 class NonFungibleTokenManager(BaseTokenManager):
     """
@@ -213,9 +259,9 @@ class NonFungibleTokenManager(BaseTokenManager):
     the maximum execution time of a lambda.
 
     Args:
-        table_name (str): Name of the DynamoDB table.
+        token_table (str): Name of the DynamoDB table containing tokens.
+        limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
-        limit (int): The maximum number of tokens that may be available.
     """
 
     def get_reservation(self, account_id):
@@ -232,7 +278,11 @@ class NonFungibleTokenManager(BaseTokenManager):
             CapacityExhaustedException: If the number of tokens and reservations are at the resource limit.
         """
         exec_time = now_utc_sec()
-        if self._get_token_count(account_id, exec_time) >= self.limit:
+
+        limit_response = self._get_account_resource_limit(account_id)
+        limit = int(limit_response['limit'])
+
+        if self._get_token_count(account_id, exec_time) >= limit:
             message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
             raise CapacityExhaustedException(message)
 
@@ -254,7 +304,7 @@ class NonFungibleTokenManager(BaseTokenManager):
             int: The number of tokens/reservations for this account on this resource.
         """
         coordinate = self._buid_coordinate(account_id)
-        return self.table.query(
+        return self.token_table.query(
             Select='COUNT',
             ConsistentRead=True,
             KeyConditionExpression=Key(RESOURCE_COORDINATE).eq(coordinate),
@@ -279,7 +329,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         coordinate = self._buid_coordinate(account_id)
         expiration_time = exec_time + 300
 
-        self.table.put_item(
+        self.token_table.put_item(
             Item={
                 RESOURCE_COORDINATE: coordinate,
                 RESOURCE_NAME: self.resource_name,
@@ -288,7 +338,7 @@ class NonFungibleTokenManager(BaseTokenManager):
                 EXPIRATION_TIME: expiration_time
             }
         )
-        return TokenReservation(id, self.table, self.resource_name, account_id, coordinate)
+        return TokenReservation(id, self.token_table, self.resource_name, account_id, coordinate)
 
     def _buid_coordinate(self, account_id):
         """
@@ -391,6 +441,22 @@ class TokenReservation(object):
             ReturnValues='NONE'
         )
         self.is_deleted = True
+
+def _compute_refill_amount(current_tokens, time_since_refill, limit, token_ms):
+    """
+    Compute the number of tokens accumulated since the last refill.
+
+    Args:
+      current_tokens (int): The number of tokens currently in the bucket.
+      time_since_refill (int): Timestamp, in milliseconds, since the last time the bucket was refilled.
+      limit (int): Time, in milliseconds, when the token retrieval started.
+      token_ms (int): The rate of token accumulation per millisecond.
+
+    Returns:
+        int: The number of tokens accumulated since the last refill.
+    """
+    tokens = max(0, current_tokens) # Tokens can be negative on bucket creation or a prolonged failure to refill
+    return min(limit - 1, tokens + int(token_ms * time_since_refill))
 
 def now_utc_sec():
     """ Get the number of seconds since the epoch """

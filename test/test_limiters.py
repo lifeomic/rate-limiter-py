@@ -10,7 +10,8 @@ class BaseLimiterTest(TestCase):
     def setUp(self):
         self.limit = 10
         self.window = 100
-        self.table_name = random_string()
+        self.token_table_name = random_string()
+        self.limit_table_name = random_string()
         self.resource_name = random_string()
 
 class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
@@ -28,9 +29,8 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
         func_to_limit = Mock()
         limiter = rate_limit(
             self.resource_name,
-            self.table_name,
-            self.limit,
-            self.window,
+            self.token_table_name,
+            self.limit_table_name,
             account_id_pos)
         limiter._manager = self.mock_manager
 
@@ -49,9 +49,8 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
         func_to_limit = MagicMock()
         limiter = rate_limit(
             self.resource_name,
-            self.table_name,
-            self.limit,
-            self.window,
+            self.token_table_name,
+            self.limit_table_name,
             account_id_key=account_id_key)
         limiter._manager = self.mock_manager
 
@@ -64,29 +63,27 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
     def test_manager_config_ctor_params(self):
         limiter = rate_limit(
             self.resource_name,
-            self.table_name,
-            self.limit,
-            self.window)
+            self.token_table_name,
+            self.limit_table_name)
         manager = limiter.manager
 
-        self.assertEquals(self.table_name, manager.table_name)
-        self.assertEquals(self.limit, manager.limit)
-        self.assertEquals(self.window * 1000, manager.window)
+        self.assertEquals(self.token_table_name, manager.token_table_name)
+        self.assertEquals(self.limit_table_name, manager.limit_table_name)
+        self.assertEquals(self.resource_name, manager.resource_name)
 
     def test_manager_config_env_params(self):
         env_vars = {
-            'FUNG_TABLE': str(self.table_name),
-            'FUNG_LIMIT': str(self.limit),
-            'FUNG_WINDOW': str(self.window)
+            'FUNGIBLE_TABLE': str(self.token_table_name),
+            'LIMIT_TABLE': str(self.limit_table_name)
         }
 
         with patch.dict('os.environ', env_vars):
             limiter = rate_limit(self.resource_name)
             manager = limiter.manager
 
-            self.assertEquals(self.table_name, manager.table_name)
-            self.assertEquals(self.limit, manager.limit)
-            self.assertEquals(self.window * 1000, manager.window)
+            self.assertEquals(self.token_table_name, manager.token_table_name)
+            self.assertEquals(self.limit_table_name, manager.limit_table_name)
+            self.assertEquals(self.resource_name, manager.resource_name)
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_decoratored_account_id_pos(self, mock_manager_delegate):
@@ -114,14 +111,14 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
         self.assertTrue(self._limited_func_account_id_key(arg_1, arg_2, account_id=account_id))
         mock_manager.get_token.assert_called_with(account_id)
 
-    @rate_limit('my-resource', 'my-table', 10, 100, account_id_pos=3)
+    @rate_limit('my-resource', 'my-token-table', 'my-limit-table', account_id_pos=3)
     def _limited_func_account_id_pos(self, arg_1, arg_2, account_id):
         self.assertIsNotNone(arg_1)
         self.assertIsNotNone(arg_2)
         self.assertIsNotNone(account_id)
         return True
 
-    @rate_limit('my-resource', 'my-table', 10, 100)
+    @rate_limit('my-resource', 'my-toke-table', 'my-limit-table')
     def _limited_func_account_id_key(self, arg_1, arg_2, account_id='my-account'):
         self.assertIsNotNone(arg_1)
         self.assertIsNotNone(arg_2)
@@ -139,15 +136,14 @@ class FungibleTokenLimiterContextManagerTest(BaseLimiterTest):
         mock_manager.return_value.get_token = Mock()
         mock_manager_delegate.return_value = mock_manager
 
-        with fungible_limiter(self.resource_name, self.account_id, self.table_name, self.limit, self.window):
+        with fungible_limiter(self.resource_name, self.account_id, self.token_table_name, self.limit_table_name):
             mock_manager.get_token.assert_called_with(self.account_id)
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_get_token_env_params(self, mock_manager_delegate):
         env_vars = {
-            'FUNG_TABLE': str(self.table_name),
-            'FUNG_LIMIT': str(self.limit),
-            'FUNG_WINDOW': str(self.window)
+            'FUNGIBLE_TABLE': str(self.token_table_name),
+            'LIMIT_TABLE': str(self.limit_table_name)
         }
 
         with patch.dict('os.environ', env_vars):
@@ -170,15 +166,18 @@ class NonFungibleTokenLimiterContextManagerTest(BaseLimiterTest):
         mock_manager.get_reservation = MagicMock(return_value=empty_reservation)
         mock_manager_delegate.return_value = mock_manager
 
-        with non_fungible_limiter(self.resource_name, self.account_id, self.table_name, self.limit) as reservation:
+        with non_fungible_limiter(self.resource_name,
+                                  self.account_id,
+                                  self.token_table_name,
+                                  self.limit_table_name) as reservation:
             mock_manager.get_reservation.assert_called_with(self.account_id)
             self.assertIs(empty_reservation, reservation)
 
     @patch('limiter.limiters.NonFungibleTokenManager')
     def test_get_token_env_params(self, mock_manager_delegate):
         env_vars = {
-            'NON_FUNG_TABLE': str(self.table_name),
-            'NON_FUNG_LIMIT': str(self.limit)
+            'NON_FUNGIBLE_TABLE': self.token_table_name,
+            'LIMIT_TABLE': self.limit_table_name
         }
 
         with patch.dict('os.environ', env_vars):
@@ -201,7 +200,10 @@ class NonFungibleTokenLimiterContextManagerTest(BaseLimiterTest):
         mock_manager_delegate.return_value = mock_manager
 
         try:
-            with non_fungible_limiter(self.resource_name, self.account_id, self.table_name, self.limit) as reservation:
+            with non_fungible_limiter(self.resource_name,
+                                      self.account_id,
+                                      self.token_table_name,
+                                      self.limit_table_name) as reservation:
                 self.assertNotNone(reservation)
                 raise StandardError('Deliberately thrown from test_delete_on_exception')
         except StandardError:
