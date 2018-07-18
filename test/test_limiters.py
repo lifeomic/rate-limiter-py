@@ -121,14 +121,14 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
         self.assertTrue(self._limited_func_account_id_key(arg_1, arg_2, account_id=account_id))
         mock_manager.get_token.assert_called_with(account_id)
 
-    @rate_limit('my-resource', 'my-token-table', 'my-limit-table', 10, 1, account_id_pos=3)
+    @rate_limit('my-resource', 10, 1, 'my-token-table', 'my-limit-table', account_id_pos=3)
     def _limited_func_account_id_pos(self, arg_1, arg_2, account_id):
         self.assertIsNotNone(arg_1)
         self.assertIsNotNone(arg_2)
         self.assertIsNotNone(account_id)
         return True
 
-    @rate_limit('my-resource', 'my-toke-table', 'my-limit-table', 10, 1)
+    @rate_limit('my-resource', 10, 1, 'my-token-table', 'my-limit-table')
     def _limited_func_account_id_key(self, arg_1, arg_2, account_id='my-account'):
         self.assertIsNotNone(arg_1)
         self.assertIsNotNone(arg_2)
