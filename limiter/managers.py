@@ -20,10 +20,8 @@ LAST_TOKEN = 'lastToken'
 RESOURCE_COORDINATE = 'resourceCoordinate'
 RESOURCE_ID = 'resourceId'
 EXPIRATION_TIME = 'expirationTime'
-
-# Defaults when no account-specific limit is found
-DEFAULT_LIMIT = 1000
-DEFAULT_WINDOW_SEC = 1
+LIMIT = 'limit'
+WINDOW_SEC = 'windowSec'
 
 class BaseTokenManager(object):
     """
@@ -33,11 +31,14 @@ class BaseTokenManager(object):
         token_table (str): Name of the DynamoDB table containing tokens.
         limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
+        default_limit (str): Number of tokens to use if no explicit limit is defined in the limits table.
     """
-    def __init__(self, token_table, limit_table, resource_name):
+    def __init__(self, token_table, limit_table, resource_name, default_limit, default_window=0):
         self.token_table_name = token_table
         self.limit_table_name = limit_table
         self.resource_name = resource_name
+        self.default_limit = default_limit
+        self.default_window = default_window
 
         self._client = None
         self._token_table = None
@@ -84,7 +85,7 @@ class BaseTokenManager(object):
             CapacityExhaustedException: If the account has no capacity for the resource, i.e. blacklisted.
             RateLimiterException: On any unrecoverable exception thrown when querying for the resource limit.
         """
-        result = {'limit': DEFAULT_LIMIT, 'windowSec': DEFAULT_WINDOW_SEC}
+        result = {LIMIT: self.default_limit, WINDOW_SEC: self.default_window}
         try:
             response = self.limit_table.query(
                 KeyConditionExpression=Key(RESOURCE_NAME).eq(self.resource_name) & Key(ACCOUNT_ID).eq(account_id)
@@ -100,7 +101,7 @@ class BaseTokenManager(object):
             message = 'Failed to get limit on {} for account {}'.format(self.resource_name, account_id)
             raise_from(RateLimiterException(message), e)
 
-        if result['limit'] <= 0:
+        if result[LIMIT] <= 0:
             message = 'Account {} has not been allocated any capacity for {}'.format(account_id, self.resource_name)
             raise CapacityExhaustedException(message)
         return result
@@ -134,6 +135,8 @@ class FungibleTokenManager(BaseTokenManager):
         token_table (str): Name of the DynamoDB table containing tokens.
         limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
+        default_limit (str): Number of tokens to use if no explicit limit is defined in the limits table.
+        default_window (str): Sliding window of time, in sec, if no explicit limit is defined in the limits table.
     """
 
     def get_token(self, account_id):
@@ -155,8 +158,8 @@ class FungibleTokenManager(BaseTokenManager):
         exec_time = now_utc_ms()
 
         limit_response = self._get_account_resource_limit(account_id)
-        limit = int(limit_response['limit'])
-        window_ms = int(limit_response['windowSec']) * 1000
+        limit = int(limit_response[LIMIT])
+        window_ms = int(limit_response[WINDOW_SEC]) * 1000
 
         token_ms = float(limit) / window_ms # Number of tokens the bucket will accumulate per millisecond
         ms_token = max(1, float(window_ms) / limit) # Number of milliseconds to accumulate a new token
@@ -262,6 +265,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         token_table (str): Name of the DynamoDB table containing tokens.
         limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
+        default_limit (str): Number of tokens to use if no explicit limit is defined in the limits table.
     """
 
     def get_reservation(self, account_id):
@@ -280,7 +284,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         exec_time = now_utc_sec()
 
         limit_response = self._get_account_resource_limit(account_id)
-        limit = int(limit_response['limit'])
+        limit = int(limit_response[LIMIT])
 
         if self._get_token_count(account_id, exec_time) >= limit:
             message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)

@@ -7,8 +7,7 @@ from moto import mock_dynamodb2
 from mock import Mock, MagicMock
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
-from limiter.managers import FungibleTokenManager, NonFungibleTokenManager, TokenReservation, _compute_refill_amount,\
-                             DEFAULT_LIMIT, DEFAULT_WINDOW_SEC
+from limiter.managers import FungibleTokenManager, NonFungibleTokenManager, TokenReservation, _compute_refill_amount
 from limiter.exceptions import CapacityExhaustedException
 
 class FungibleTokenManagerTest(TestCase):
@@ -18,11 +17,13 @@ class FungibleTokenManagerTest(TestCase):
         self.resource_name = random_string()
 
         self.limit = 10
-        self.window_ms = 100000
+        self.window = 100
+        self.window_ms = self.window * 1000
         self.token_ms = float(self.limit) / self.window_ms
         self.ms_token = float(self.window_ms) / self.limit
 
-        self.manager = FungibleTokenManager(self.token_table, self.limit_table, self.resource_name)
+        self.manager = FungibleTokenManager(self.token_table, self.limit_table, self.resource_name, self.limit,
+                                            self.window)
 
     def test_compute_refill_amount(self):
         current_tokens = 5
@@ -157,8 +158,8 @@ class FungibleTokenManagerTest(TestCase):
         self.manager._limit_table = mock_limit_table
 
         result = self.manager._get_account_resource_limit(account_id)
-        self.assertEquals(DEFAULT_LIMIT, result['limit'])
-        self.assertEquals(DEFAULT_WINDOW_SEC, result['windowSec'])
+        self.assertEquals(self.limit, result['limit'])
+        self.assertEquals(self.window, result['windowSec'])
 
     @mock_dynamodb2
     def test_account_resource_limit_blacklist(self):
@@ -179,7 +180,7 @@ class NonFungibleTokenManagerTest(TestCase):
         self.resource_name = random_string()
 
         self.limit = 5
-        self.manager = NonFungibleTokenManager(self.token_table, self.limit_table, self.resource_name)
+        self.manager = NonFungibleTokenManager(self.token_table, self.limit_table, self.resource_name, self.limit)
 
     @mock_dynamodb2
     def test_get_reservation(self):

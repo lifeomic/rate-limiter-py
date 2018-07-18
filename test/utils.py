@@ -13,7 +13,7 @@ def now_utc_sec():
 def now_utc_ms():
     return round(float(datetime.utcnow().strftime('%s.%f')) * 1000)
 
-def create_limit_table(table_name):
+def create_limit_table(table_name, index_name='idx'):
     """ Tests which call this are expected to be in mock_dynamodb2 context """
 
     mock_client = boto3.client('dynamodb', region_name='us-east-1')
@@ -44,6 +44,37 @@ def create_limit_table(table_name):
         {
             'AttributeName': 'windowSec',
             'AttributeType': 'N'
+        },
+        {
+            'AttributeName': 'serviceName',
+            'AttributeType': 'S'
+        },
+        {
+            'AttributeName': 'configVersion',
+            'AttributeType': 'N'
+        }
+    ]
+
+    global_sec_indexes = [
+        {
+            'IndexName': index_name,
+            'KeySchema': [
+                {
+                    'AttributeName': 'serviceName',
+                    'KeyType': 'HASH'
+                },
+                {
+                    'AttributeName': 'configVersion',
+                    'KeyType': 'HASH'
+                }
+            ],
+            'Projection': {
+                'ProjectionType': 'ALL'
+            },
+            'ProvisionedThroughput': {
+                'ReadCapacityUnits': 123,
+                'WriteCapacityUnits': 123
+            }
         }
     ]
 
@@ -55,6 +86,7 @@ def create_limit_table(table_name):
     mock_client.create_table(TableName=table_name,
                              KeySchema=key_schema,
                              AttributeDefinitions=attribute_definitions,
+                             GlobalSecondaryIndexes=global_sec_indexes,
                              ProvisionedThroughput=provisioned_throughput)
 
     return boto3.resource('dynamodb', 'us-east-1').Table(table_name)
