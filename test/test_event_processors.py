@@ -209,7 +209,7 @@ class EventProcessorManagerTest(TestCase):
     def test_env_params(self):
         env_vars = {
             'NON_FUNGIBLE_TABLE': self.table_name,
-            'NON_FUNG_RES_INDEX': self.index_name
+            'NON_FUNGIBLE_RES_INDEX': self.index_name
         }
 
         with patch.dict('os.environ', env_vars):

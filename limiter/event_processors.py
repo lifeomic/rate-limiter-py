@@ -142,7 +142,7 @@ class EventProcessorManager(object):
                           Can be set via environment variable `NON_FUNGIBLE_TABLE`
                           or synthesized using the `LIMITER_TABLES_BASE_NAME` environment variable.
         index_name (str): Name of the index to query for the resource coordinate using the resource id.
-                          Can be set via environment variable `NON_FUNG_RES_INDEX`
+                          Can be set via environment variable `NON_FUNGIBLE_RES_INDEX`
                           or synthesized using the `LIMITER_TABLES_BASE_NAME` environment variable.
         processors (list:EventProcessor): List of event processors. Defaults to None.
 
@@ -156,7 +156,7 @@ class EventProcessorManager(object):
     def __init__(self, table_name=None, index_name=None, processors=None):
         self.processors = {x.source: x for x in processors} if processors else {}
         self.table_name = validate_table_env_fallback(table_name, 'NON_FUNGIBLE_TABLE', 'non-fungible-tokens')
-        self.index_name = validate_table_env_fallback(index_name, 'NON_FUNG_RES_INDEX', 'resource-index')
+        self.index_name = validate_table_env_fallback(index_name, 'NON_FUNGIBLE_RES_INDEX', 'resource-index')
 
         self._client = None
         self._table = None
