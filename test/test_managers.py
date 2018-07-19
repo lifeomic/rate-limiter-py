@@ -73,7 +73,7 @@ class FungibleTokenManagerTest(TestCase):
                     'resourceName': self.resource_name,
                     'accountId': account_id
                 },
-                'UpdateExpression': 'add tokens :dec, set lastToken :exec_time',
+                'UpdateExpression': 'add tokens :dec set lastToken = :exec_time',
                 'ConditionExpression': 'tokens > :min OR lastToken < :failsafe OR attribute_not_exists(tokens)',
                 'ExpressionAttributeValues': {
                     ':dec': -1,
@@ -124,7 +124,7 @@ class FungibleTokenManagerTest(TestCase):
                     'accountId': account_id
                 },
                 'UpdateExpression': 'set tokens = :tokens, lastRefill = :refill_time',
-                'ConditionExpression': 'lastRefill < :refill_time',
+                'ConditionExpression': 'lastRefill < :refill_time OR attribute_not_exists(lastRefill)',
                 'ExpressionAttributeValues': {
                     ':tokens': tokens,
                     ':refill_time': refill_time
@@ -226,7 +226,8 @@ class NonFungibleTokenManagerTest(TestCase):
                 'resourceName': self.resource_name,
                 'accountId': account_id,
                 'resourceId': 'resource-' + str(i),
-                'expirationTime': now + 10000
+                'expirationTime': now + 10000,
+                'reservationId': random_string()
             }
             mock_token_table.put_item(Item=token)
 
@@ -251,7 +252,8 @@ class NonFungibleTokenManagerTest(TestCase):
             'resourceName': self.resource_name,
             'accountId': account_id,
             'resourceId': random_string(),
-            'expirationTime': now
+            'expirationTime': now,
+            'reservationId': random_string()
         }
 
         expired_token_2 = {
@@ -259,7 +261,8 @@ class NonFungibleTokenManagerTest(TestCase):
             'resourceName': self.resource_name,
             'accountId': account_id,
             'resourceId': random_string(),
-            'expirationTime': now - 1000
+            'expirationTime': now - 1000,
+            'reservationId': random_string()
         }
 
         valid_token = {
@@ -267,7 +270,8 @@ class NonFungibleTokenManagerTest(TestCase):
             'resourceName': self.resource_name,
             'accountId': account_id,
             'resourceId': random_string(),
-            'expirationTime': now + 300
+            'expirationTime': now + 300,
+            'reservationId': random_string()
         }
 
         mock_token_table.put_item(Item=expired_token_1)
@@ -344,6 +348,7 @@ def _insert_reservation(mock_token_table, reservation):
         'resourceName': reservation.resource_name,
         'accountId': reservation.account_id,
         'resourceId': reservation.id,
+        'reservationId': reservation.id,
         'expirationTime': now_utc_sec() + 300
     }
     mock_token_table.put_item(Item=reservation_item)
@@ -353,6 +358,7 @@ def _insert_limit(mock_limit_table, resource_name, account_id, limit, window_sec
         'resourceName': resource_name,
         'accountId': account_id,
         'limit': limit,
-        'windowSec': window_sec
+        'windowSec': window_sec,
+        'serviceName': random_string()
     }
     mock_limit_table.put_item(Item=limit_item)

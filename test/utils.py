@@ -48,10 +48,6 @@ def create_limit_table(table_name, index_name='idx'):
         {
             'AttributeName': 'serviceName',
             'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'configVersion',
-            'AttributeType': 'N'
         }
     ]
 
@@ -61,10 +57,6 @@ def create_limit_table(table_name, index_name='idx'):
             'KeySchema': [
                 {
                     'AttributeName': 'serviceName',
-                    'KeyType': 'HASH'
-                },
-                {
-                    'AttributeName': 'configVersion',
                     'KeyType': 'HASH'
                 }
             ],
@@ -101,7 +93,7 @@ def create_non_fung_table(table_name, index_name='idx'):
             'KeyType': 'HASH'
         },
         {
-            'AttributeName': 'resourceId',
+            'AttributeName': 'reservationId',
             'KeyType': 'RANGE'
         }
     ]
@@ -109,6 +101,10 @@ def create_non_fung_table(table_name, index_name='idx'):
     attribute_definitions = [
         {
             'AttributeName': 'resourceCoordinate',
+            'AttributeType': 'S'
+        },
+        {
+            'AttributeName': 'reservationId',
             'AttributeType': 'S'
         },
         {

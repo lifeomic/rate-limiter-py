@@ -149,7 +149,7 @@ class FungibleTokenLimiterDecorator(BaseFungibleTokenLimiter):
                  account_id_key='account_id'):
         super(FungibleTokenLimiterDecorator, self).__init__(resource_name, default_limit, default_window, token_table,
                                                             limit_table)
-        self.is_account_id_kwarg = not account_id_pos
+        self.is_account_id_kwarg = account_id_pos is None
         self.account_id_index = account_id_key if self.is_account_id_kwarg else account_id_pos
 
     def __call__(self, func_to_limit):
@@ -228,6 +228,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
 
     def __exit__(self, *args):
         if any(args):
+            print str(args)
             self.reservation.delete()
 
     def get_reservation(self):

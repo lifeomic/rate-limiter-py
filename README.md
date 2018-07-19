@@ -70,7 +70,6 @@ These are all the expected table attributes, including the keys.
 | limit          | Number    | The maximum number of tokens the account may acquire on the resource                           |
 | windowSec      | Number    | Sliding window of time, in seconds, wherein only the limit number of tokens will be available. |
 | serviceName    | String    | Name of the service that created this limit.                                                   |
-| configVersion  | Number    | Version of the configuration when this limit was created.                                      |
 
 ##### Keys
 
@@ -88,7 +87,6 @@ The service limits global secondary index is used when updating/loading service 
 | Attribute Name | Key Type |
 |----------------|----------|
 | serviceName    | HASH     |
-| configVersion  | RANGE    |
 
 ### Usage
 
@@ -209,6 +207,7 @@ These are all the expected table attributes, including the keys.
 | Attribute Name     | Data Type | Description                                                   |
 |--------------------|-----------|---------------------------------------------------------------|
 | resourceCoordinate | String    | Composed of the resource name and account id                  |
+| reservationId      | String    | Identifies the token reservation                              |
 | resourceId         | String    | Identifies the instance of a resource, e.g. EMR cluster id    |
 | resourceName       | String    | User-defined name of the rate limited resource                |
 | expirationTime     | Number    | Timestamp, in sec, when the token will be expired by DynamoDB |
@@ -222,7 +221,7 @@ The key data type and description can be found in the above, attributes table.
 | Attribute Name     | Key Type |
 |--------------------|----------|
 | resourceCoordinate | HASH     |
-| resourceId         | RANGE    |
+| reservationId      | RANGE    |
 
 #### Global Secondary Index
 

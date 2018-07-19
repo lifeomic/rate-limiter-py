@@ -87,10 +87,6 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
             limiter = rate_limit(self.resource_name, self.limit, self.window)
             manager = limiter.manager
 
-            print manager.token_table_name
-            print manager.limit_table_name
-            print manager.resource_name
-
             self.assertEquals(self.token_table_name, manager.token_table_name)
             self.assertEquals(self.limit_table_name, manager.limit_table_name)
             self.assertEquals(self.resource_name, manager.resource_name)
