@@ -4,7 +4,7 @@ import logging
 from boto3.dynamodb.conditions import Key
 from limiter.utils import validate_table_env_fallback
 from limiter.clients import dynamodb
-from limiter.managers import RESOURCE_COORDINATE, RESOURCE_ID
+from limiter.managers import RESOURCE_COORDINATE, RESOURCE_ID, RESERVATION_ID
 
 logger = logging.getLogger()
 
@@ -142,7 +142,7 @@ class EventProcessorManager(object):
                           Can be set via environment variable `NON_FUNGIBLE_TABLE`
                           or synthesized using the `LIMITER_TABLES_BASE_NAME` environment variable.
         index_name (str): Name of the index to query for the resource coordinate using the resource id.
-                          Can be set via environment variable `NON_FUNG_RES_INDEX`
+                          Can be set via environment variable `NON_FUNGIBLE_RES_INDEX`
                           or synthesized using the `LIMITER_TABLES_BASE_NAME` environment variable.
         processors (list:EventProcessor): List of event processors. Defaults to None.
 
@@ -156,7 +156,7 @@ class EventProcessorManager(object):
     def __init__(self, table_name=None, index_name=None, processors=None):
         self.processors = {x.source: x for x in processors} if processors else {}
         self.table_name = validate_table_env_fallback(table_name, 'NON_FUNGIBLE_TABLE', 'non-fungible-tokens')
-        self.index_name = validate_table_env_fallback(index_name, 'NON_FUNG_RES_INDEX', 'resource-index')
+        self.index_name = validate_table_env_fallback(index_name, 'NON_FUNGIBLE_RES_INDEX', 'resource-index')
 
         self._client = None
         self._table = None
@@ -208,13 +208,13 @@ class EventProcessorManager(object):
         processor = self._get_processor(event)
         resource_id = processor.test_and_get_id(event)
         if resource_id:
-            resource_coordinate = self._get_resource_coordinate(resource_id)
-            if resource_coordinate:
+            token = self._get_resource_token(resource_id)
+            if token:
                 logger.info('Removing %s token %s from %s', processor.source, resource_id, self.table_name)
                 self.table.delete_item(
                     Key={
-                        RESOURCE_COORDINATE: resource_coordinate,
-                        RESOURCE_ID: resource_id
+                        RESOURCE_COORDINATE: token[RESOURCE_COORDINATE],
+                        RESERVATION_ID: token[RESERVATION_ID]
                     }
                 )
             else:
@@ -242,20 +242,20 @@ class EventProcessorManager(object):
             raise ValueError('No processor for event source: ' + source)
         return processor
 
-    def _get_resource_coordinate(self, resource_id):
+    def _get_resource_token(self, resource_id):
         """
-        Get the resource coordinate column value for the given resource id.
+        Get the token representing the specified resouce.
 
         Args:
-            resource_id (str): Resource id to get the resource coordinate of.
+            resource_id (str): Resource id to get the resource token of.
 
         Returns:
-            str: The resource coordinate if a token with the resource id exists, None otherwise.
+            (dict): The token representing the specpfied resource.
         """
         response = self.table.query(
             IndexName=self.index_name,
             KeyConditionExpression=Key(RESOURCE_ID).eq(resource_id))
-        return None if response['Count'] == 0 else response['Items'][0][RESOURCE_COORDINATE]
+        return None if response['Count'] == 0 else response['Items'][0]
 
 def _reduce_to_path(obj, path):
     """

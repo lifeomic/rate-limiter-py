@@ -182,6 +182,7 @@ class EventProcessorManagerTest(TestCase):
         self.resource_name = random_string()
         self.account_id = random_string()
         self.resource_id = random_string()
+        self.reservation_id = random_string()
 
     def test_no_event_source(self):
         event = {'detail': {'state': 'TERMINATED'}}
@@ -209,7 +210,7 @@ class EventProcessorManagerTest(TestCase):
     def test_env_params(self):
         env_vars = {
             'NON_FUNGIBLE_TABLE': self.table_name,
-            'NON_FUNG_RES_INDEX': self.index_name
+            'NON_FUNGIBLE_RES_INDEX': self.index_name
         }
 
         with patch.dict('os.environ', env_vars):
@@ -290,6 +291,7 @@ class EventProcessorManagerTest(TestCase):
             'resourceName': self.resource_name,
             'accountId': self.account_id,
             'resourceId': self.resource_id,
-            'expirationTime': now_utc_sec() + 300
+            'expirationTime': now_utc_sec() + 300,
+            'reservationId': self.reservation_id
         }
         mock_table.put_item(Item=token_item)

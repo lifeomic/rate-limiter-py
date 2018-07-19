@@ -20,10 +20,9 @@ LAST_TOKEN = 'lastToken'
 RESOURCE_COORDINATE = 'resourceCoordinate'
 RESOURCE_ID = 'resourceId'
 EXPIRATION_TIME = 'expirationTime'
-
-# Defaults when no account-specific limit is found
-DEFAULT_LIMIT = 1000
-DEFAULT_WINDOW_SEC = 1
+LIMIT = 'limit'
+WINDOW_SEC = 'windowSec'
+RESERVATION_ID = 'reservationId'
 
 class BaseTokenManager(object):
     """
@@ -33,11 +32,14 @@ class BaseTokenManager(object):
         token_table (str): Name of the DynamoDB table containing tokens.
         limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
+        default_limit (str): Number of tokens to use if no explicit limit is defined in the limits table.
     """
-    def __init__(self, token_table, limit_table, resource_name):
+    def __init__(self, token_table, limit_table, resource_name, default_limit, default_window=0):
         self.token_table_name = token_table
         self.limit_table_name = limit_table
         self.resource_name = resource_name
+        self.default_limit = default_limit
+        self.default_window = default_window
 
         self._client = None
         self._token_table = None
@@ -54,7 +56,7 @@ class BaseTokenManager(object):
     def token_table(self):
         """ DynamoDB Table containing token row """
         if not self._token_table:
-            self._table = self.client.Table(self.token_table_name)
+            self._token_table = self.client.Table(self.token_table_name)
         return self._token_table
 
     @property
@@ -84,7 +86,7 @@ class BaseTokenManager(object):
             CapacityExhaustedException: If the account has no capacity for the resource, i.e. blacklisted.
             RateLimiterException: On any unrecoverable exception thrown when querying for the resource limit.
         """
-        result = {'limit': DEFAULT_LIMIT, 'windowSec': DEFAULT_WINDOW_SEC}
+        result = {LIMIT: self.default_limit, WINDOW_SEC: self.default_window}
         try:
             response = self.limit_table.query(
                 KeyConditionExpression=Key(RESOURCE_NAME).eq(self.resource_name) & Key(ACCOUNT_ID).eq(account_id)
@@ -100,7 +102,7 @@ class BaseTokenManager(object):
             message = 'Failed to get limit on {} for account {}'.format(self.resource_name, account_id)
             raise_from(RateLimiterException(message), e)
 
-        if result['limit'] <= 0:
+        if result[LIMIT] <= 0:
             message = 'Account {} has not been allocated any capacity for {}'.format(account_id, self.resource_name)
             raise CapacityExhaustedException(message)
         return result
@@ -134,6 +136,8 @@ class FungibleTokenManager(BaseTokenManager):
         token_table (str): Name of the DynamoDB table containing tokens.
         limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
+        default_limit (str): Number of tokens to use if no explicit limit is defined in the limits table.
+        default_window (str): Sliding window of time, in sec, if no explicit limit is defined in the limits table.
     """
 
     def get_token(self, account_id):
@@ -155,11 +159,11 @@ class FungibleTokenManager(BaseTokenManager):
         exec_time = now_utc_ms()
 
         limit_response = self._get_account_resource_limit(account_id)
-        limit = int(limit_response['limit'])
-        window_ms = int(limit_response['windowSec']) * 1000
+        limit = int(limit_response[LIMIT])
+        window_ms = int(limit_response[WINDOW_SEC]) * 1000
 
         token_ms = float(limit) / window_ms # Number of tokens the bucket will accumulate per millisecond
-        ms_token = max(1, float(window_ms) / limit) # Number of milliseconds to accumulate a new token
+        ms_token = int(max(1, float(window_ms) / limit)) # Number of milliseconds to accumulate a new token
 
         bucket = self._get_bucket_token(account_id, exec_time, ms_token)
         current_tokens = bucket[TOKENS]
@@ -188,7 +192,7 @@ class FungibleTokenManager(BaseTokenManager):
             RateLimiterException: On any unrecoverable exception thrown when querying for the resource limit.
         """
         try:
-            update_exp = 'add {} :dec, set {} :exec_time'.format(TOKENS, LAST_TOKEN)
+            update_exp = 'add {} :dec set {} = :exec_time'.format(TOKENS, LAST_TOKEN)
             condition_exp = '{0} > :min OR {1} < :failsafe OR attribute_not_exists({0})'.format(TOKENS, LAST_TOKEN)
             return self.token_table.update_item(
                 Key={
@@ -214,8 +218,7 @@ class FungibleTokenManager(BaseTokenManager):
                 elif error_code == 'ProvisionedThroughputExceededException' or error_code == 'TooManyRequestsException':
                     message = 'Throttled by getting limit on {} for account {}'.format(self.resource_name, account_id)
                     raise_from(ThrottlingException(message), e)
-            message = 'Failed to get limit on {} for account {}'.format(self.resource_name, account_id)
-            raise_from(RateLimiterException(message), e)
+            raise
 
     def _refill_bucket_tokens(self, account_id, tokens, refill_time):
         """
@@ -228,7 +231,7 @@ class FungibleTokenManager(BaseTokenManager):
         """
         try:
             update_exp = 'set {} = :tokens, {} = :refill_time'.format(TOKENS, LAST_REFILL)
-            condition_exp = '{} < :refill_time'.format(LAST_REFILL)
+            condition_exp = '{0} < :refill_time OR attribute_not_exists({0})'.format(LAST_REFILL)
             self.token_table.update_item(
                 Key={
                     RESOURCE_NAME: self.resource_name,
@@ -243,11 +246,11 @@ class FungibleTokenManager(BaseTokenManager):
                 ReturnValues='NONE'
             )
         except Exception as e:
-            if isinstance(e, ClientError):
-                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                    logger.warn('Failed to refill tokens for %s:%s, already refilled with more current state',
-                                self.resource_name, account_id)
-            logger.exception('Failed to refill tokens for %s:%s', self.resource_name, account_id)
+            if isinstance(e, ClientError) and e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                logger.warn('Failed to refill tokens for %s:%s, already refilled with more current state',
+                            self.resource_name, account_id)
+            else:
+                logger.exception('Failed to refill tokens for %s:%s', self.resource_name, account_id)
 
 class NonFungibleTokenManager(BaseTokenManager):
     """
@@ -262,6 +265,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         token_table (str): Name of the DynamoDB table containing tokens.
         limit_table (str): Name of the DynamoDB table containing limits.
         resource_name (str): Name of the resource being rate-limited.
+        default_limit (str): Number of tokens to use if no explicit limit is defined in the limits table.
     """
 
     def get_reservation(self, account_id):
@@ -280,7 +284,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         exec_time = now_utc_sec()
 
         limit_response = self._get_account_resource_limit(account_id)
-        limit = int(limit_response['limit'])
+        limit = int(limit_response[LIMIT])
 
         if self._get_token_count(account_id, exec_time) >= limit:
             message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
@@ -332,6 +336,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         self.token_table.put_item(
             Item={
                 RESOURCE_COORDINATE: coordinate,
+                RESERVATION_ID: id,
                 RESOURCE_NAME: self.resource_name,
                 ACCOUNT_ID: account_id,
                 RESOURCE_ID: id,
@@ -400,16 +405,15 @@ class TokenReservation(object):
 
         try:
             expiration_time = now_utc_sec() + expiration
-            update_exp = 'set {} = :exp_time, set {} = :resource_id'.format(EXPIRATION_TIME, RESOURCE_ID)
+            update_exp = 'set {} = :exp_time, {} = :resource_id'.format(EXPIRATION_TIME, RESOURCE_ID)
             self.table.update_item(
                 Key={
                     RESOURCE_COORDINATE: self.coordinate,
-                    RESOURCE_ID: self.id
+                    RESERVATION_ID: self.id
                 },
                 UpdateExpression=update_exp,
                 ExpressionAttributeValues={
                     ':exp_time': expiration_time,
-                    ':reserve_id': self.id,
                     ':resource_id': resource_id
                 },
                 ReturnValues='ALL_NEW'
@@ -436,7 +440,7 @@ class TokenReservation(object):
         self.table.delete_item(
             Key={
                 RESOURCE_COORDINATE: self.coordinate,
-                RESOURCE_ID: self.id
+                RESERVATION_ID: self.id
             },
             ReturnValues='NONE'
         )
@@ -464,4 +468,4 @@ def now_utc_sec():
 
 def now_utc_ms():
     """ Get the number of milliseconds since the epoch """
-    return round(float(datetime.utcnow().strftime('%s.%f')) * 1000)
+    return int(round(float(datetime.utcnow().strftime('%s.%f')) * 1000))

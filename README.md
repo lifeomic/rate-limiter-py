@@ -45,7 +45,6 @@ These are all the expected table attributes, including the keys.
 | lastRefill     | Number    | Timestamp, in milliseconds, when the tokens were replenished |
 | lastToken      | Number    | Timestamp, in milliseconds, when the last token was taken    |
 
-
 ##### Keys
 
 The key data type and description can be found in the above, attributes table.
@@ -70,6 +69,7 @@ These are all the expected table attributes, including the keys.
 | accountId      | String    | Id of the entity which created the resource                                                    |
 | limit          | Number    | The maximum number of tokens the account may acquire on the resource                           |
 | windowSec      | Number    | Sliding window of time, in seconds, wherein only the limit number of tokens will be available. |
+| serviceName    | String    | Name of the service that created this limit.                                                   |
 
 ##### Keys
 
@@ -80,27 +80,39 @@ The key data type and description can be found in the above, attributes table.
 | resourceName   | HASH     |
 | accountId      | RANGE    |
 
+##### Service Limits Index
+
+The service limits global secondary index is used when updating/loading service limits.
+
+| Attribute Name | Key Type |
+|----------------|----------|
+| serviceName    | HASH     |
+
 ### Usage
 
 Each of the fungible token limiter implementations require the names of the token and limit tables. These values can be
 passed directly to the limiter or set via environment variables.
 
-| Name        | Environment Variable | Description                                         |
-|-------------|----------------------|-----------------------------------------------------|
-| token_table | FUNGIBLE_TABLE       | Name of the DynamoDB table containing tokens.       |
-| limit_table | LIMIT_TABLE          | Name of the DynamoDB table containing account limit |
+| Name        | Environment Variable | Description                                          |
+|-------------|----------------------|------------------------------------------------------|
+| token_table | FUNGIBLE_TABLE       | Name of the DynamoDB table containing tokens.        |
+| limit_table | LIMIT_TABLE          | Name of the DynamoDB table containing account limit. |
 
 The only other value required by each implementation is `account id`. Each implementation handles specifying this value
 differently.
 
 #### Decorator
 
-The function decorator has a minimum of two arguments:
+The function decorator has a minimum of four arguments:
 
 1.  The name of the resource being rate-limited.
 
 1.  How to access the account id from the arguments of the function being decorated. This can be either a positional
     argument numeric index or a keyword argument key.
+
+1.  The default limit, used when no limit is found in the limits table.
+
+1.  The default window, used when no window is found in the limits table.
 
 ##### Examples
 
@@ -111,7 +123,7 @@ The examples below assume the table name, limit and window have been set via env
 ```python
 from limiter import rate_limit
 
-@rate_limit('my-resource', account_id_pos=1)
+@rate_limit('my-resource', 1, 10, account_id_pos=1)
 def invoke_my_resource(arg_1, account_id):
   # If I am here, I was not rate limited
 ```
@@ -121,23 +133,27 @@ def invoke_my_resource(arg_1, account_id):
 ```python
 from limiter import rate_limit
 
-@rate_limit('my-resource', account_id_key='foo')
+@rate_limit('my-resource', 1, 10, account_id_key='foo')
 def invoke_my_resource(arg_1, foo='account-1234'):
   # If I am here, I was not rate limited
 
 # The default keyword argument is "account_id", to make the decorator more succinct:
-@rate_limit('my-resource')
+@rate_limit('my-resource', 1, 10)
 def invoke_my_resource(arg_1, account_id='account-1234'):
   # If I am here, I was not rate limited
 ```
 
 #### Context Manager
 
-The context manager has a minimum of two arguments:
+The context manager has a minimum of four arguments:
 
 1.  The name of the resource being rate-limited.
 
 1.  The account id.
+
+1.  The default limit, used when no limit is found in the limits table.
+
+1.  The default window, used when no window is found in the limits table.
 
 ##### Example
 
@@ -147,17 +163,21 @@ The example below assume the table name, limit and window have been set via envi
 from limiter import fungible_limiter
 
 def invoke_my_resource(account_id):
-  with fungible_limiter('my-resource', account_id):
+  with fungible_limiter('my-resource', account_id, 1, 10):
     # If I am here, I was not rate limited
 ```
 
 #### Direct
 
-Directly creating an instance of the fungible limiter has a minimum of two arguments:
+Directly creating an instance of the fungible limiter has a minimum of four arguments:
 
 1.  The name of the resource being rate-limited.
 
 1.  The account id.
+
+1.  The default limit, used when no limit is found in the limits table.
+
+1.  The default window, used when no window is found in the limits table.
 
 ##### Example
 
@@ -167,7 +187,7 @@ The example below assume the table name, limit and window have been set via envi
 from limiter import fungible_limiter
 
 def invoke_my_resource(account_id):
-  limiter = fungible_limiter('my-resource', account_id)
+  limiter = fungible_limiter('my-resource', account_id, 1, 10)
   limiter.get_token()
   # If I am here, I was not rate limited
 ```
@@ -187,6 +207,7 @@ These are all the expected table attributes, including the keys.
 | Attribute Name     | Data Type | Description                                                   |
 |--------------------|-----------|---------------------------------------------------------------|
 | resourceCoordinate | String    | Composed of the resource name and account id                  |
+| reservationId      | String    | Identifies the token reservation                              |
 | resourceId         | String    | Identifies the instance of a resource, e.g. EMR cluster id    |
 | resourceName       | String    | User-defined name of the rate limited resource                |
 | expirationTime     | Number    | Timestamp, in sec, when the token will be expired by DynamoDB |
@@ -200,7 +221,7 @@ The key data type and description can be found in the above, attributes table.
 | Attribute Name     | Key Type |
 |--------------------|----------|
 | resourceCoordinate | HASH     |
-| resourceId         | RANGE    |
+| reservationId      | RANGE    |
 
 #### Global Secondary Index
 
@@ -228,11 +249,13 @@ Each implementation example assumes the table name and limit have been set via e
 
 #### Context Manager
 
-The context manager has a minimum of two arguments:
+The context manager has a minimum of three arguments:
 
 1.  The name of the resource being rate-limited.
 
 1.  The account id.
+
+1.  The default limit, used when no limit is found in the limits table.
 
 ##### Example
 
@@ -240,18 +263,20 @@ The context manager has a minimum of two arguments:
 from limiter import non_fungible_limiter
 
 def invoke_my_resource(account_id):
-  with non_fungible_limiter('my-resource', account_id) as reservation:
+  with non_fungible_limiter('my-resource', account_id, 10) as reservation:
     emr_cluster_id = create_emr_cluster() # Create an instance of the resource
     reservation.create_token(emr_cluster_id) # Create a token for this unique resource
 ```
 
 #### Directly
 
-Directly creating an instance of the non-fungible limiter has a minimum of two arguments:
+Directly creating an instance of the non-fungible limiter has a minimum of three arguments:
 
 1.  The name of the resource being rate-limited.
 
 1.  The account id.
+
+1.  The default limit, used when no limit is found in the limits table.
 
 ##### Example
 
@@ -259,7 +284,7 @@ Directly creating an instance of the non-fungible limiter has a minimum of two a
 from limiter import non_fungible_limiter
 
 def invoke_my_resource(account_id):
-  limiter = non_fungible_limiter('my-resource', account_id)
+  limiter = non_fungible_limiter('my-resource', account_id, 10)
   reservation = limiter.get_reservation()
 
   emr_cluster_id = create_emr_cluster() # Create an instance of the resource
