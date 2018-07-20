@@ -2,13 +2,15 @@
 from setuptools import setup, find_packages
 
 setup(name='rate-limiter-py',
-    version='0.0.0',
-    description='',
+    version='0.1.0',
+    description='Rate-limiter module which leverages DynamoDB to enforce resource limits.',
+    keywords=['lifeomic', 'dynamodb', 'rate', 'limit'],
     author='Matthew Tieman',
-    author_email='matthew.tieman@lifeomic.com',
-    url='',
+    author_email='mjtieman55@gmail.com',
+    url='https://github.com/lifeomic/rate-limiter-py',
+    download_url='https://github.com/lifeomic/rate-limiter-py/archive/0.1.0.tar.gz',
     packages=find_packages(),
-    license='Proprietary',
+    license='MIT',
     install_requires=[
         'boto3==1.6.4',
         'botocore==1.9.4',
