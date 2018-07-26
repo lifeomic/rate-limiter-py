@@ -189,6 +189,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_processor = Mock()
         mock_processor.source = random_string()
+        mock_processor.type = None
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -201,6 +202,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_processor = Mock()
         mock_processor.source = random_string()
+        mock_processor.type = None
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -224,6 +226,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_processor = Mock()
         mock_processor.source = event_source
+        mock_processor.type = None
         mock_processor.test_and_get_id = MagicMock(return_value=self.resource_id)
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
@@ -245,6 +248,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_processor = Mock()
         mock_processor.source = event_source
+        mock_processor.type = None
         mock_processor.test_and_get_id = MagicMock(return_value=random_string())
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
@@ -266,6 +270,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_processor = Mock()
         mock_processor.source = event_source
+        mock_processor.type = None
         mock_processor.test_and_get_id = MagicMock(return_value=None)
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
@@ -279,6 +284,62 @@ class EventProcessorManagerTest(TestCase):
         manager.process_event(event)
 
         self.assertEquals(1, self._get_resource_id_count(mock_table))
+
+    @mock_dynamodb2
+    def test_delete_on_type(self):
+        event_source = random_string()
+        detail_type = random_string()
+        event = {'source': event_source, 'detail-type': detail_type}
+
+        mock_default_processor = Mock()
+        mock_default_processor.source = event_source
+        mock_default_processor.type = None
+        mock_default_processor.test_and_get_id = MagicMock(side_effect=StandardError('Wrong processor invoked'))
+
+        mock_type_processor = Mock()
+        mock_type_processor.source = event_source
+        mock_type_processor.type = detail_type
+        mock_type_processor.test_and_get_id = MagicMock(return_value=self.resource_id)
+
+        mock_table = create_non_fung_table(self.table_name, self.index_name)
+        self._insert_token(mock_table)
+        self.assertEquals(1, self._get_resource_id_count(mock_table))
+
+        manager = EventProcessorManager(table_name=self.table_name,
+                                        index_name=self.index_name,
+                                        processors=[mock_default_processor, mock_type_processor])
+        manager._table = mock_table
+        manager.process_event(event)
+
+        self.assertEquals(0, self._get_resource_id_count(mock_table))
+
+    @mock_dynamodb2
+    def test_delete_fallback_no_type(self):
+        event_source = random_string()
+        detail_type = random_string()
+        event = {'source': event_source, 'detail-type': detail_type}
+
+        mock_default_processor = Mock()
+        mock_default_processor.source = event_source
+        mock_default_processor.type = None
+        mock_default_processor.test_and_get_id = MagicMock(return_value=self.resource_id)
+
+        mock_type_processor = Mock()
+        mock_type_processor.source = event_source
+        mock_type_processor.type = detail_type + random_string()
+        mock_type_processor.test_and_get_id = MagicMock(side_effect=StandardError('Wrong processor invoked'))
+
+        mock_table = create_non_fung_table(self.table_name, self.index_name)
+        self._insert_token(mock_table)
+        self.assertEquals(1, self._get_resource_id_count(mock_table))
+
+        manager = EventProcessorManager(table_name=self.table_name,
+                                        index_name=self.index_name,
+                                        processors=[mock_default_processor, mock_type_processor])
+        manager._table = mock_table
+        manager.process_event(event)
+
+        self.assertEquals(0, self._get_resource_id_count(mock_table))
 
     def _get_resource_id_count(self, mock_table):
         response = mock_table.query(IndexName=self.index_name,

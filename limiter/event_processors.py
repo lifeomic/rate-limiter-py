@@ -100,7 +100,8 @@ class EventProcessor(object):
     Args:
         source (str): The origination this processor supports events for, e.g. aws.emr
         id_path (str): Dot delineated path to the resource id value.
-        predicate (ProcessorPredicate): Prediate to test the event against before extracting the id. Defaults to None.
+        predicate (ProcessorPredicate): Predicate to test the event against before extracting the id. Defaults to None.
+        type (str): Event detail-type of the event this porcessor supports. Defaults to None.
 
     Examples:
         >>> event = {'source': 'aws.emr', 'detail': {'clusterId': 'j-1YONHTCP3YZKC', 'state': 'COMPLETED'}}
@@ -109,10 +110,11 @@ class EventProcessor(object):
         >>> processor.test_and_get_id(event)
         j-1YONHTCP3YZKC
     """
-    def __init__(self, source, id_path, predicate=None):
+    def __init__(self, source, id_path, predicate=None, type=None):
         self.source = source
         self.id_path = id_path
         self.predicate = predicate
+        self.typ = type
 
     def test_and_get_id(self, event):
         """
@@ -154,9 +156,11 @@ class EventProcessorManager(object):
         >>> manager.process_event(event)
     """
     def __init__(self, table_name=None, index_name=None, processors=None):
-        self.processors = {x.source: x for x in processors} if processors else {}
+        self.processors = {_build_processor_key(x.source, x.type): x for x in processors} if processors else {}
         self.table_name = validate_table_env_fallback(table_name, 'NON_FUNGIBLE_TABLE', 'non-fungible-tokens')
         self.index_name = validate_table_env_fallback(index_name, 'NON_FUNGIBLE_RES_INDEX', 'resource-index')
+
+        self.cache = []
 
         self._client = None
         self._table = None
@@ -207,7 +211,7 @@ class EventProcessorManager(object):
         """
         processor = self._get_processor(event)
         resource_id = processor.test_and_get_id(event)
-        if resource_id:
+        if resource_id and resource_id not in self.cache:
             token = self._get_resource_token(resource_id)
             if token:
                 logger.info('Removing %s token %s from %s', processor.source, resource_id, self.table_name)
@@ -219,6 +223,7 @@ class EventProcessorManager(object):
                 )
             else:
                 logger.warn('Could not find a token for resoure %s', resource_id)
+            self.cache.append(resource_id)
 
     def _get_processor(self, event):
         """
@@ -237,7 +242,13 @@ class EventProcessorManager(object):
             raise ValueError('Cannot process event, source is a required field. Event: ' + str(event))
 
         source = event['source']
-        processor = self.processors.get(source, None)
+        type = event.get('detail-type', None)
+        source_type_key = _build_processor_key(source, type)
+
+        processor = self.processors.get(source_type_key, None)
+        if not processor:
+            processor = self.processors.get(source, None)
+
         if not processor:
             raise ValueError('No processor for event source: ' + source)
         return processor
@@ -282,3 +293,6 @@ def _reduce_to_path(obj, path):
     except Exception:
         sys.exc_clear()
     return None
+
+def _build_processor_key(source, type=None):
+    return source + ':' + type.replace(' ', '').lower() if type else source

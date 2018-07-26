@@ -321,6 +321,15 @@ def handler(event, context):
   manager.process_event(event)
 ```
 
+EventProcessors can also be configured with the event `detail-type`. The EventProcessor in the above example
+can be tweaked to process EMR step changes.
+
+```python
+...
+processor = EventProcessor('aws.emr', 'detail.stepId', type='EMR Step Status Change', predicate=predicate)
+...
+```
+
 ## Development
 
 ### Dependencies
