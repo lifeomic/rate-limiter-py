@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(name='rate-limiter-py',
-    version='0.1.0',
+    version='0.2.0',
     description='Rate-limiter module which leverages DynamoDB to enforce resource limits.',
     keywords=['lifeomic', 'dynamodb', 'rate', 'limit'],
     author='Matthew Tieman',
