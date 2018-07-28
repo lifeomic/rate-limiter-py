@@ -174,6 +174,18 @@ class EventProcessorTest(TestCase):
 
         self.assertIsNone(event_id)
 
+    def test_processor_properties(self):
+        source = random_string()
+        id_path = random_string()
+        type = random_string()
+        predicate = ProcessorPredicate('detail.state', lambda state: True)
+
+        processor = EventProcessor(source, id_path, predicate=predicate, type=type)
+        self.assertEquals(source, processor.source)
+        self.assertEquals(id_path, processor.id_path)
+        self.assertEquals(type, processor.type)
+        self.assertEquals(predicate, processor.predicate)
+
 class EventProcessorManagerTest(TestCase):
     def setUp(self):
         self.table_name = random_string()

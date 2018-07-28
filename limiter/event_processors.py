@@ -114,7 +114,7 @@ class EventProcessor(object):
         self.source = source
         self.id_path = id_path
         self.predicate = predicate
-        self.typ = type
+        self.type = type
 
     def test_and_get_id(self, event):
         """
