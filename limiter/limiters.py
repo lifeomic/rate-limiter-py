@@ -228,7 +228,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
 
     def __exit__(self, *args):
         if any(args):
-            print str(args)
+            print(str(args))
             self.reservation.delete()
 
     def get_reservation(self):

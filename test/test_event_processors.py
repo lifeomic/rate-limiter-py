@@ -306,7 +306,7 @@ class EventProcessorManagerTest(TestCase):
         mock_default_processor = Mock()
         mock_default_processor.source = event_source
         mock_default_processor.type = None
-        mock_default_processor.test_and_get_id = MagicMock(side_effect=StandardError('Wrong processor invoked'))
+        mock_default_processor.test_and_get_id = MagicMock(side_effect=Exception('Wrong processor invoked'))
 
         mock_type_processor = Mock()
         mock_type_processor.source = event_source
@@ -339,7 +339,7 @@ class EventProcessorManagerTest(TestCase):
         mock_type_processor = Mock()
         mock_type_processor.source = event_source
         mock_type_processor.type = detail_type + random_string()
-        mock_type_processor.test_and_get_id = MagicMock(side_effect=StandardError('Wrong processor invoked'))
+        mock_type_processor.test_and_get_id = MagicMock(side_effect=Exception('Wrong processor invoked'))
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)

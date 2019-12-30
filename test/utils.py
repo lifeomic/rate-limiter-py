@@ -5,7 +5,7 @@ from datetime import datetime
 import boto3
 
 def random_string(length=8):
-    return ''.join(random.choice(string.lowercase) for i in range(length))
+    return ''.join(random.choice(string.ascii_lowercase) for i in range(length))
 
 def now_utc_sec():
     return int(datetime.utcnow().strftime('%s'))
@@ -36,14 +36,6 @@ def create_limit_table(table_name, index_name='idx'):
         {
             'AttributeName': 'accountId',
             'AttributeType': 'RANGE'
-        },
-        {
-            'AttributeName': 'limit',
-            'AttributeType': 'N'
-        },
-        {
-            'AttributeName': 'windowSec',
-            'AttributeType': 'N'
         },
         {
             'AttributeName': 'serviceName',
@@ -105,18 +97,6 @@ def create_non_fung_table(table_name, index_name='idx'):
         },
         {
             'AttributeName': 'reservationId',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'expirationTime',
-            'AttributeType': 'N'
-        },
-        {
-            'AttributeName': 'resourceName',
-            'AttributeType': 'S'
-        },
-        {
-            'AttributeName': 'accountId',
             'AttributeType': 'S'
         },
         {

@@ -1,6 +1,6 @@
 #!/bin/bash/env python
-import sys
 import logging
+import functools
 from boto3.dynamodb.conditions import Key
 from limiter.utils import validate_table_env_fallback
 from limiter.clients import dynamodb
@@ -287,11 +287,11 @@ def _reduce_to_path(obj, path):
         str: If the path is valid, otherwise None.
     """
     try:
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = path.split('.')
-        return reduce(lambda x, y: x[y], path, obj)
-    except Exception:
-        sys.exc_clear()
+        return functools.reduce(lambda x, y: x[y], path, obj)
+    except Exception as e:
+        pass
     return None
 
 def _build_processor_key(source, type=None):
