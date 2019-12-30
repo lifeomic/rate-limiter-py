@@ -32,7 +32,7 @@ class FungibleTokenManagerTest(TestCase):
         expected = 8
         actual = _compute_refill_amount(current_tokens, time_since_refill, self.limit, self.token_ms)
 
-        self.assertEquals(expected, actual)
+        self.assertEqual(expected, actual)
 
     def test_compute_refill_amount_negative_balance(self):
         current_tokens = -7
@@ -41,7 +41,7 @@ class FungibleTokenManagerTest(TestCase):
         expected = 3
         actual = _compute_refill_amount(current_tokens, time_since_refill, self.limit, self.token_ms)
 
-        self.assertEquals(expected, actual)
+        self.assertEqual(expected, actual)
 
     def test_compute_refill_amount_refill_lag(self):
         current_tokens = 0
@@ -49,7 +49,7 @@ class FungibleTokenManagerTest(TestCase):
 
         expected = self.limit - 1
         actual = _compute_refill_amount(current_tokens, time_since_refill, self.limit, self.token_ms)
-        self.assertEquals(expected, actual)
+        self.assertEqual(expected, actual)
 
     def test_get_bucket_token(self):
         account_id = random_string()
@@ -62,10 +62,10 @@ class FungibleTokenManagerTest(TestCase):
         self.manager._token_table = mock_token_table
 
         actual = self.manager._get_bucket_token(account_id, exec_time, self.ms_token)
-        self.assertEquals(expected, actual)
+        self.assertEqual(expected, actual)
 
         actual_args = mock_token_table.update_item.call_args_list
-        self.assertEquals(1, len(actual_args))
+        self.assertEqual(1, len(actual_args))
 
         expected_args = [
             ({
@@ -85,7 +85,7 @@ class FungibleTokenManagerTest(TestCase):
             })
         ]
 
-        self.assertEquals(expected_args, actual_args[0])
+        self.assertEqual(expected_args, actual_args[0])
 
     def test_get_bucket_token_exhausted(self):
         exec_time = now_utc_ms()
@@ -115,7 +115,7 @@ class FungibleTokenManagerTest(TestCase):
         self.manager._refill_bucket_tokens(account_id, tokens, refill_time)
 
         actual_args = mock_token_table.update_item.call_args_list
-        self.assertEquals(1, len(actual_args))
+        self.assertEqual(1, len(actual_args))
 
         expected_args = [
             ({
@@ -133,7 +133,7 @@ class FungibleTokenManagerTest(TestCase):
             })
         ]
 
-        self.assertEquals(expected_args, actual_args[0])
+        self.assertEqual(expected_args, actual_args[0])
 
     @mock_dynamodb2
     def test_account_resource_limit(self):
@@ -147,8 +147,8 @@ class FungibleTokenManagerTest(TestCase):
         self.manager._limit_table = mock_limit_table
         result = self.manager._get_account_resource_limit(account_id)
 
-        self.assertEquals(limit, result['limit'])
-        self.assertEquals(window, result['windowSec'])
+        self.assertEqual(limit, result['limit'])
+        self.assertEqual(window, result['windowSec'])
 
     @mock_dynamodb2
     def test_account_resource_limit_defaults(self):
@@ -158,8 +158,8 @@ class FungibleTokenManagerTest(TestCase):
         self.manager._limit_table = mock_limit_table
 
         result = self.manager._get_account_resource_limit(account_id)
-        self.assertEquals(self.limit, result['limit'])
-        self.assertEquals(self.window, result['windowSec'])
+        self.assertEqual(self.limit, result['limit'])
+        self.assertEqual(self.window, result['windowSec'])
 
     @mock_dynamodb2
     def test_account_resource_limit_blacklist(self):
@@ -198,11 +198,11 @@ class NonFungibleTokenManagerTest(TestCase):
         self.manager.get_reservation(account_id)
 
         response = mock_token_table.query(KeyConditionExpression=Key('resourceCoordinate').eq(coordinate))
-        self.assertEquals(1, response['Count'])
+        self.assertEqual(1, response['Count'])
 
         items = dict(pair for item in response['Items'] for pair in item.items())
-        self.assertEquals(self.resource_name, items['resourceName'])
-        self.assertEquals(account_id, items['accountId'])
+        self.assertEqual(self.resource_name, items['resourceName'])
+        self.assertEqual(account_id, items['accountId'])
         self.assertTrue(items['expirationTime'] > now)
         self.assertIn('resourceId', items)
 
@@ -282,7 +282,7 @@ class NonFungibleTokenManagerTest(TestCase):
         self.manager._limit_table = mock_limit_table
         actual_count = self.manager._get_token_count(account_id, now)
 
-        self.assertEquals(expected_count, actual_count)
+        self.assertEqual(expected_count, actual_count)
 
     @mock_dynamodb2
     def test_get_token_count_no_tokens(self):
@@ -299,7 +299,7 @@ class NonFungibleTokenManagerTest(TestCase):
         expected_count = 0
         actual_count = self.manager._get_token_count(account_id, now)
 
-        self.assertEquals(expected_count, actual_count)
+        self.assertEqual(expected_count, actual_count)
 
 class TokenReservationTest(TestCase):
     def setUp(self):
@@ -317,12 +317,12 @@ class TokenReservationTest(TestCase):
         _insert_reservation(mock_token_table, reserve)
 
         response = mock_token_table.query(KeyConditionExpression=Key('resourceCoordinate').eq(self.coordinate))
-        self.assertEquals(1, response['Count'])
+        self.assertEqual(1, response['Count'])
 
         reserve.delete()
 
         response = mock_token_table.query(KeyConditionExpression=Key('resourceCoordinate').eq(self.coordinate))
-        self.assertEquals(0, response['Count'])
+        self.assertEqual(0, response['Count'])
 
     def test_create_after_delete(self):
         mock_token_table = Mock()

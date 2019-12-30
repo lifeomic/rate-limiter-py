@@ -73,9 +73,9 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
             self.limit_table_name)
         manager = limiter.manager
 
-        self.assertEquals(self.token_table_name, manager.token_table_name)
-        self.assertEquals(self.limit_table_name, manager.limit_table_name)
-        self.assertEquals(self.resource_name, manager.resource_name)
+        self.assertEqual(self.token_table_name, manager.token_table_name)
+        self.assertEqual(self.limit_table_name, manager.limit_table_name)
+        self.assertEqual(self.resource_name, manager.resource_name)
 
     def test_manager_config_env_params(self):
         env_vars = {
@@ -87,9 +87,9 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
             limiter = rate_limit(self.resource_name, self.limit, self.window)
             manager = limiter.manager
 
-            self.assertEquals(self.token_table_name, manager.token_table_name)
-            self.assertEquals(self.limit_table_name, manager.limit_table_name)
-            self.assertEquals(self.resource_name, manager.resource_name)
+            self.assertEqual(self.token_table_name, manager.token_table_name)
+            self.assertEqual(self.limit_table_name, manager.limit_table_name)
+            self.assertEqual(self.resource_name, manager.resource_name)
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_decoratored_account_id_pos(self, mock_manager_delegate):

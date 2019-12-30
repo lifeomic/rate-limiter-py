@@ -138,7 +138,7 @@ class EventProcessorTest(TestCase):
         processor = EventProcessor(source, 'detail.id', predicate=mock_predicate)
         actual_id = processor.test_and_get_id(event)
 
-        self.assertEquals(expected_id, actual_id)
+        self.assertEqual(expected_id, actual_id)
 
     def test_without_predicate(self):
         source = random_string()
@@ -148,7 +148,7 @@ class EventProcessorTest(TestCase):
         processor = EventProcessor(source, 'detail.id')
         actual_id = processor.test_and_get_id(event)
 
-        self.assertEquals(expected_id, actual_id)
+        self.assertEqual(expected_id, actual_id)
 
     def test_invalid_path(self):
         source = random_string()
@@ -181,10 +181,10 @@ class EventProcessorTest(TestCase):
         predicate = ProcessorPredicate('detail.state', lambda state: True)
 
         processor = EventProcessor(source, id_path, predicate=predicate, type=type)
-        self.assertEquals(source, processor.source)
-        self.assertEquals(id_path, processor.id_path)
-        self.assertEquals(type, processor.type)
-        self.assertEquals(predicate, processor.predicate)
+        self.assertEqual(source, processor.source)
+        self.assertEqual(id_path, processor.id_path)
+        self.assertEqual(type, processor.type)
+        self.assertEqual(predicate, processor.predicate)
 
 class EventProcessorManagerTest(TestCase):
     def setUp(self):
@@ -229,7 +229,7 @@ class EventProcessorManagerTest(TestCase):
 
         with patch.dict('os.environ', env_vars):
             manager = EventProcessorManager()
-            self.assertEquals(self.table_name, manager.table_name)
+            self.assertEqual(self.table_name, manager.table_name)
 
     @mock_dynamodb2
     def test_delete_token(self):
@@ -243,7 +243,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -251,7 +251,7 @@ class EventProcessorManagerTest(TestCase):
         manager._table = mock_table
         manager.process_event(event)
 
-        self.assertEquals(0, self._get_resource_id_count(mock_table))
+        self.assertEqual(0, self._get_resource_id_count(mock_table))
 
     @mock_dynamodb2
     def test_delete_no_token_for_id(self):
@@ -265,7 +265,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -273,7 +273,7 @@ class EventProcessorManagerTest(TestCase):
         manager._table = mock_table
         manager.process_event(event)
 
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
     @mock_dynamodb2
     def test_delete_no_id_from_processor(self):
@@ -287,7 +287,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -295,7 +295,7 @@ class EventProcessorManagerTest(TestCase):
         manager._table = mock_table
         manager.process_event(event)
 
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
     @mock_dynamodb2
     def test_delete_on_type(self):
@@ -315,7 +315,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -323,7 +323,7 @@ class EventProcessorManagerTest(TestCase):
         manager._table = mock_table
         manager.process_event(event)
 
-        self.assertEquals(0, self._get_resource_id_count(mock_table))
+        self.assertEqual(0, self._get_resource_id_count(mock_table))
 
     @mock_dynamodb2
     def test_delete_fallback_no_type(self):
@@ -343,7 +343,7 @@ class EventProcessorManagerTest(TestCase):
 
         mock_table = create_non_fung_table(self.table_name, self.index_name)
         self._insert_token(mock_table)
-        self.assertEquals(1, self._get_resource_id_count(mock_table))
+        self.assertEqual(1, self._get_resource_id_count(mock_table))
 
         manager = EventProcessorManager(table_name=self.table_name,
                                         index_name=self.index_name,
@@ -351,7 +351,7 @@ class EventProcessorManagerTest(TestCase):
         manager._table = mock_table
         manager.process_event(event)
 
-        self.assertEquals(0, self._get_resource_id_count(mock_table))
+        self.assertEqual(0, self._get_resource_id_count(mock_table))
 
     def _get_resource_id_count(self, mock_table):
         response = mock_table.query(IndexName=self.index_name,

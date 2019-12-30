@@ -24,7 +24,7 @@ LIMIT = 'limit'
 WINDOW_SEC = 'windowSec'
 RESERVATION_ID = 'reservationId'
 
-class BaseTokenManager(object):
+class BaseTokenManager:
     """
     Base class for both fungible and non-fungible token managers.
 
@@ -96,7 +96,7 @@ class BaseTokenManager(object):
         except Exception as e:
             if isinstance(e, ClientError):
                 error_code = e.response['Error']['Code']
-                if error_code == 'ProvisionedThroughputExceededException' or error_code == 'TooManyRequestsException':
+                if error_code in ('ProvisionedThroughputExceededException', 'TooManyRequestsException'):
                     message = 'Throttled getting limit on {} for account {}'.format(self.resource_name, account_id)
                     raise_from(ThrottlingException(message), e)
             message = 'Failed to get limit on {} for account {}'.format(self.resource_name, account_id)
@@ -215,7 +215,7 @@ class FungibleTokenManager(BaseTokenManager):
                 if error_code == 'ConditionalCheckFailedException':
                     message = 'Resource capcity exhausted for {}:{}'.format(self.resource_name, account_id)
                     raise CapacityExhaustedException(message)
-                elif error_code == 'ProvisionedThroughputExceededException' or error_code == 'TooManyRequestsException':
+                if error_code in ('ProvisionedThroughputExceededException', 'TooManyRequestsException'):
                     message = 'Throttled by getting limit on {} for account {}'.format(self.resource_name, account_id)
                     raise_from(ThrottlingException(message), e)
             raise
@@ -247,8 +247,8 @@ class FungibleTokenManager(BaseTokenManager):
             )
         except Exception as e:
             if isinstance(e, ClientError) and e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                logger.warn('Failed to refill tokens for %s:%s, already refilled with more current state',
-                            self.resource_name, account_id)
+                logger.warning('Failed to refill tokens for %s:%s, already refilled with more current state',
+                               self.resource_name, account_id)
             else:
                 logger.exception('Failed to refill tokens for %s:%s', self.resource_name, account_id)
 
@@ -357,7 +357,7 @@ class NonFungibleTokenManager(BaseTokenManager):
         """
         return '{}:{}'.format(self.resource_name, account_id)
 
-class TokenReservation(object):
+class TokenReservation:
     """
     Used to represent a temporary placeholder for, and create a non-fungible token, in DynamoDB.
 
@@ -430,11 +430,11 @@ class TokenReservation(object):
         Delete the entry in DynamoDB representing this reservation.
         """
         if self.is_token_created:
-            logger.warn('Cannot delete, a token has already been created from this reservation [%s]', self.id)
+            logger.warning('Cannot delete, a token has already been created from this reservation [%s]', self.id)
             return
 
         if self.is_deleted:
-            logger.warn('Cannot delete, this reservation [%s], has already been deleted', self.id)
+            logger.warning('Cannot delete, this reservation [%s], has already been deleted', self.id)
             return
 
         self.table.delete_item(

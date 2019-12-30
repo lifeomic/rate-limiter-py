@@ -2,7 +2,7 @@
 from limiter.utils import validate_table_env_fallback
 from limiter.managers import FungibleTokenManager, NonFungibleTokenManager
 
-class BaseTokenLimiter(object):
+class BaseTokenLimiter:
     """
     Base class for both fungible and non-fungible token limiters.
 
