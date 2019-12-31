@@ -9,7 +9,7 @@ from limiter.managers import ACCOUNT_ID, RESOURCE_NAME, LIMIT, WINDOW_SEC
 SERVICE_NAME = 'serviceName'
 CONFIG_VERSION = 'configVersion'
 
-class LimitLoader(object):
+class LimitLoader:
     """
     Performs initial limit loading and updates for a specified service.
 

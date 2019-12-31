@@ -2,7 +2,7 @@
 from limiter.utils import validate_table_env_fallback
 from limiter.managers import FungibleTokenManager, NonFungibleTokenManager
 
-class BaseTokenLimiter(object):
+class BaseTokenLimiter:
     """
     Base class for both fungible and non-fungible token limiters.
 
@@ -228,7 +228,7 @@ class NonFungibleTokenLimiterContextManager(BaseTokenLimiter):
 
     def __exit__(self, *args):
         if any(args):
-            print str(args)
+            print(str(args))
             self.reservation.delete()
 
     def get_reservation(self):

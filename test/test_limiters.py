@@ -73,9 +73,9 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
             self.limit_table_name)
         manager = limiter.manager
 
-        self.assertEquals(self.token_table_name, manager.token_table_name)
-        self.assertEquals(self.limit_table_name, manager.limit_table_name)
-        self.assertEquals(self.resource_name, manager.resource_name)
+        self.assertEqual(self.token_table_name, manager.token_table_name)
+        self.assertEqual(self.limit_table_name, manager.limit_table_name)
+        self.assertEqual(self.resource_name, manager.resource_name)
 
     def test_manager_config_env_params(self):
         env_vars = {
@@ -87,9 +87,9 @@ class FungibleTokenLimiterDecoratorTest(BaseLimiterTest):
             limiter = rate_limit(self.resource_name, self.limit, self.window)
             manager = limiter.manager
 
-            self.assertEquals(self.token_table_name, manager.token_table_name)
-            self.assertEquals(self.limit_table_name, manager.limit_table_name)
-            self.assertEquals(self.resource_name, manager.resource_name)
+            self.assertEqual(self.token_table_name, manager.token_table_name)
+            self.assertEqual(self.limit_table_name, manager.limit_table_name)
+            self.assertEqual(self.resource_name, manager.resource_name)
 
     @patch('limiter.limiters.FungibleTokenManager')
     def test_decoratored_account_id_pos(self, mock_manager_delegate):
@@ -213,8 +213,8 @@ class NonFungibleTokenLimiterContextManagerTest(BaseLimiterTest):
                                       self.token_table_name,
                                       self.limit_table_name) as reservation:
                 self.assertNotNone(reservation)
-                raise StandardError('Deliberately thrown from test_delete_on_exception')
-        except StandardError:
+                raise Exception('Deliberately thrown from test_delete_on_exception')
+        except Exception:
             pass
 
         mock_reservation.delete.assert_called()

@@ -1,6 +1,6 @@
 #!/bin/bash/env python
-import sys
 import logging
+import functools
 from boto3.dynamodb.conditions import Key
 from limiter.utils import validate_table_env_fallback
 from limiter.clients import dynamodb
@@ -8,7 +8,7 @@ from limiter.managers import RESOURCE_COORDINATE, RESOURCE_ID, RESERVATION_ID
 
 logger = logging.getLogger()
 
-class ProcessorPredicate(object):
+class ProcessorPredicate:
     """
     Determines if an event matches a specific criteria.
 
@@ -89,7 +89,7 @@ class ProcessorPredicate(object):
                     break
         return result
 
-class EventProcessor(object):
+class EventProcessor:
     """
     Validates and extracts the resource id from events.
 
@@ -130,7 +130,7 @@ class EventProcessor(object):
         """
         return None if self.predicate and not self.predicate.test(event) else _reduce_to_path(event, self.id_path)
 
-class EventProcessorManager(object):
+class EventProcessorManager:
     """
     Removes non-fungible tokens from DynamoDB represented by termination events.
 
@@ -222,7 +222,7 @@ class EventProcessorManager(object):
                     }
                 )
             else:
-                logger.warn('Could not find a token for resoure %s', resource_id)
+                logger.warning('Could not find a token for resoure %s', resource_id)
             self.cache.append(resource_id)
 
     def _get_processor(self, event):
@@ -287,11 +287,11 @@ def _reduce_to_path(obj, path):
         str: If the path is valid, otherwise None.
     """
     try:
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = path.split('.')
-        return reduce(lambda x, y: x[y], path, obj)
+        return functools.reduce(lambda x, y: x[y], path, obj)
     except Exception:
-        sys.exc_clear()
+        pass
     return None
 
 def _build_processor_key(source, type=None):
