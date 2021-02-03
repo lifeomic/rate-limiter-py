@@ -1,8 +1,0 @@
-*.pyc
-*.tox
-*.egg-info
-nosetests.xml
-coverage.xml
-pylint.out
-dist/
-build/
